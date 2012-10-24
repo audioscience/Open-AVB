@@ -166,6 +166,8 @@ struct netif *netif_open(int timeout_ms)
 			printf(" (%-70s)\n", netif->d->description);
 		else
 			printf(" (No description available)\n");
+		if ( strstr(netif->d->description,"RTX Virtual") )
+			inum = i;
 	}
 	total_interfaces = i;
 
@@ -175,8 +177,10 @@ struct netif *netif_open(int timeout_ms)
 		goto error_return;
 	}
 
-	printf("Enter the interface number (1-%d):", i);
-	scanf_s("%d", &inum);
+	if (inum==0){
+		printf("Enter the interface number (1-%d):", i);
+		scanf_s("%d", &inum);
+	}
 
 	if (inum < 1 || inum > i) {
 		printf("\nInterface number out of range.\n");
