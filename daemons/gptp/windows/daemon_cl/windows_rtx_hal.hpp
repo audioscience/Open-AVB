@@ -206,6 +206,9 @@ protected:
 		return wait_count > 0;
 	}
 public:
+	~WindowsCondition() {
+		RtCloseHandle(event);
+	}
     bool wait_prelock() {
         up();
         return true;
@@ -243,113 +246,147 @@ class WindowsTimerQueue;
 
 struct TimerQueue_t;
 
-struct WindowsTimerQueueHandlerArg {
-    HANDLE timer_handle;
-    HANDLE queue_handle;
-    event_descriptor_t *inner_arg;
-    ostimerq_handler func;
+struct WindowsTimerQueueEntry {
+	LONGLONG due_time;
     int type;
+    ostimerq_handler func;
+    event_descriptor_t *arg;
     bool rm;
-    WindowsTimerQueue *queue;
-    TimerQueue_t *timer_queue;
 };
 
-typedef std::list<WindowsTimerQueueHandlerArg *> TimerArgList_t;
-struct TimerQueue_t {
-    TimerArgList_t arg_list;
-    HANDLE queue_handle;
-    SRWLOCK lock;
-};
+typedef std::list<WindowsTimerQueueEntry *> TimerEntryList_t;
 
-LPSYSTEMTIME pTime;
-VOID CALLBACK WindowsTimerQueueHandler( PVOID arg_in, BOOLEAN ignore );
-
-typedef std::map<int,TimerQueue_t> TimerQueueMap_t;
+DWORD WindowsTimerQueueThread( PVOID that );
 
 class WindowsTimerQueue : public OSTimerQueue {
     friend class WindowsTimerQueueFactory;
-    friend VOID CALLBACK WindowsTimerQueueHandler( PVOID arg_in, BOOLEAN ignore );
+    friend DWORD WindowsTimerQueueThread( PVOID that );
 private:
-    TimerQueueMap_t timerQueueMap;
-    TimerArgList_t retiredTimers;
-    SRWLOCK retiredTimersLock;
-    void cleanupRetiredTimers() {
-        AcquireSRWLockExclusive( &retiredTimersLock );
-        while( !retiredTimers.empty() ) {
-            WindowsTimerQueueHandlerArg *retired_arg = retiredTimers.front();
-            retiredTimers.pop_front();
-            ReleaseSRWLockExclusive( &retiredTimersLock );
-            DeleteTimerQueueTimer( retired_arg->queue_handle, retired_arg->timer_handle, INVALID_HANDLE_VALUE );
-            if( retired_arg->rm ) delete retired_arg->inner_arg;
-            delete retired_arg;
-            AcquireSRWLockExclusive( &retiredTimersLock );
-        }
-        ReleaseSRWLockExclusive( &retiredTimersLock );
-
+	TimerEntryList_t activeTimers;
+	HANDLE activeTimersMutex;
+    TimerEntryList_t retiredTimers;
+	HANDLE retiredTimersMutex;
+	LONGLONG performanceCounterFreq;
+	HANDLE timerThread;
+	HANDLE killThreadEvent;
+    void cleanupTimers(TimerEntryList_t *pTimerList,HANDLE mutex) {
+		DWORD result = RtWaitForSingleObject(mutex,INFINITE);
+		if (result!=WAIT_OBJECT_0) return;
+		while( !pTimerList->empty() ) {
+			WindowsTimerQueueEntry *entry = pTimerList->front();
+			pTimerList->pop_front();
+			RtReleaseMutex(mutex);
+			if( entry->rm ) delete entry->arg;
+			delete entry;
+			result = RtWaitForSingleObject(mutex,INFINITE);
+			if (result!=WAIT_OBJECT_0) return;
+		}
+	    RtReleaseMutex(mutex);
     }
+	LONGLONG getTimeOut( unsigned long micros ) {
+		LONGLONG ticks;
+		LARGE_INTEGER curtime;
+
+		QueryPerformanceCounter(&curtime);
+		ticks = (LONGLONG) micros * performanceCounterFreq / 1000000;
+		return curtime.QuadPart + ticks;
+	}
 protected:
     WindowsTimerQueue() {
-        InitializeSRWLock( &retiredTimersLock );
+		LARGE_INTEGER li;
+		activeTimersMutex = RtCreateMutex(NULL,FALSE,NULL);
+        retiredTimersMutex = RtCreateMutex(NULL,FALSE,NULL);
+		QueryPerformanceFrequency(&li);
+		performanceCounterFreq = li.QuadPart;
+		killThreadEvent = RtCreateEvent(NULL,TRUE,FALSE,NULL);
+		timerThread = CreateThread(NULL,0,(LPTHREAD_START_ROUTINE)WindowsTimerQueueThread,this,0,NULL);
+    };
+    ~WindowsTimerQueue() {
+		RtSetEvent(killThreadEvent);
+		RtWaitForSingleObject(timerThread,INFINITE);
+        cleanupTimers(&activeTimers,activeTimersMutex);
+        cleanupTimers(&retiredTimers,retiredTimersMutex);
+		RtCloseHandle(killThreadEvent);
+		RtCloseHandle(activeTimersMutex);
+        RtCloseHandle(retiredTimersMutex);
     };
 public:
     bool addEvent( unsigned long micros, int type, ostimerq_handler func, event_descriptor_t *arg, bool rm, unsigned *event ) {
-        WindowsTimerQueueHandlerArg *outer_arg = new WindowsTimerQueueHandlerArg();
-        cleanupRetiredTimers();
-        if( timerQueueMap.find(type) == timerQueueMap.end() ) {
-            timerQueueMap[type].queue_handle = CreateTimerQueue();
-            InitializeSRWLock( &timerQueueMap[type].lock );
-        }
-        outer_arg->queue_handle = timerQueueMap[type].queue_handle;
-        outer_arg->inner_arg = arg;
-        outer_arg->func = func;
-        outer_arg->queue = this;
-        outer_arg->type = type;
-        outer_arg->timer_queue = &timerQueueMap[type];
-        AcquireSRWLockExclusive( &timerQueueMap[type].lock );
-        CreateTimerQueueTimer( &outer_arg->timer_handle, timerQueueMap[type].queue_handle, WindowsTimerQueueHandler, (void *) outer_arg, micros/1000, 0, 0 );
-        timerQueueMap[type].arg_list.push_front(outer_arg);
-        ReleaseSRWLockExclusive( &timerQueueMap[type].lock );
+        WindowsTimerQueueEntry *entry = new WindowsTimerQueueEntry();
+        cleanupTimers(&retiredTimers,retiredTimersMutex);
+		entry->due_time = getTimeOut(micros);
+        entry->type = type;
+        entry->func = func;
+        entry->arg = arg;
+		entry->rm = rm;
+		DWORD result = RtWaitForSingleObject(activeTimersMutex,INFINITE);
+		if (result!=WAIT_OBJECT_0) {
+			if( rm ) delete arg;
+			delete entry;
+			return false;
+		}
+		activeTimers.push_back(entry);
+		RtReleaseMutex(activeTimersMutex);
         return true;
     }
     bool cancelEvent( int type, unsigned *event ) {
-        TimerQueueMap_t::iterator iter = timerQueueMap.find( type );
-        if( iter == timerQueueMap.end() ) return false;
-        AcquireSRWLockExclusive( &timerQueueMap[type].lock );
-        while( ! timerQueueMap[type].arg_list.empty() ) {
-            WindowsTimerQueueHandlerArg *del_arg = timerQueueMap[type].arg_list.front();
-            timerQueueMap[type].arg_list.pop_front();
-            ReleaseSRWLockExclusive( &timerQueueMap[type].lock );
-            DeleteTimerQueueTimer( del_arg->queue_handle, del_arg->timer_handle, INVALID_HANDLE_VALUE );
-            if( del_arg->rm ) delete del_arg->inner_arg;
-            delete del_arg;
-            AcquireSRWLockExclusive( &timerQueueMap[type].lock );
-        }
-        ReleaseSRWLockExclusive( &timerQueueMap[type].lock );
-
+		DWORD result = RtWaitForSingleObject(activeTimersMutex,INFINITE);
+		if (result!=WAIT_OBJECT_0) {
+			return false;
+		}
+		TimerEntryList_t::iterator iter = activeTimers.begin();
+		while( iter != activeTimers.end() ){
+			WindowsTimerQueueEntry *entry = *iter;
+			if( entry->type == type ){
+				iter = activeTimers.erase(iter);
+				if( entry->rm ) delete entry->arg;
+				delete entry;
+			}else{
+				++iter;
+			}
+		}
+		RtReleaseMutex(activeTimersMutex);
         return true;
     }
 };
 
-VOID CALLBACK WindowsTimerQueueHandler( PVOID arg_in, BOOLEAN ignore ) {
-    WindowsTimerQueueHandlerArg *arg = (WindowsTimerQueueHandlerArg *) arg_in;
-    size_t diff;
+DWORD WindowsTimerQueueThread( PVOID that ) {
+	WindowsTimerQueue *wtq = (WindowsTimerQueue *)that;
 
-	SetThreadPriority(GetCurrentThread(),THREAD_PRIORITY_TIME_CRITICAL);
+	for(;;) {
+		LARGE_INTEGER curtime;
+	    TimerEntryList_t firedTimers;
+		DWORD result = RtWaitForSingleObject(wtq->killThreadEvent,1);
+		if (result==WAIT_OBJECT_0) break;
 
-    // Remove myself from unexpired timer queue
-    AcquireSRWLockExclusive( &arg->timer_queue->lock );
-    diff  = arg->timer_queue->arg_list.size();
-    arg->timer_queue->arg_list.remove( arg );
-    diff -= arg->timer_queue->arg_list.size();
-    ReleaseSRWLockExclusive( &arg->timer_queue->lock );
+		QueryPerformanceCounter(&curtime);
 
-    if( diff == 0 ) return;
-    arg->func( arg->inner_arg );
-
-    // Add myself to the expired timer queue
-    AcquireSRWLockExclusive( &arg->queue->retiredTimersLock );
-    arg->queue->retiredTimers.push_front( arg );
-    ReleaseSRWLockExclusive( &arg->queue->retiredTimersLock );
+		result = RtWaitForSingleObject(wtq->activeTimersMutex,INFINITE);
+		if (result==WAIT_OBJECT_0) {
+			TimerEntryList_t::iterator iter = wtq->activeTimers.begin();
+			while( iter != wtq->activeTimers.end() ){
+				WindowsTimerQueueEntry *entry = *iter;
+				if( entry->due_time <= curtime.QuadPart ){
+					entry->func(entry->arg); // Call it.
+					firedTimers.push_front(entry);
+					iter = wtq->activeTimers.erase(iter);
+				}else{
+					++iter;
+				}
+			}
+			RtReleaseMutex(wtq->activeTimersMutex);
+		}
+		result = RtWaitForSingleObject(wtq->retiredTimersMutex,INFINITE);
+		if (result==WAIT_OBJECT_0) {
+			while( !firedTimers.empty() ) {
+				WindowsTimerQueueEntry *entry = firedTimers.front();
+				firedTimers.pop_front();
+				wtq->retiredTimers.push_front(entry);
+			}
+			RtReleaseMutex(wtq->retiredTimersMutex);
+		}
+	}
+	return 0;
 }
 
 class WindowsTimerQueueFactory : public OSTimerQueueFactory {
