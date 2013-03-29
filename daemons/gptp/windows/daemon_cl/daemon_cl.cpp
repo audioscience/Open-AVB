@@ -36,7 +36,7 @@
 #include "avbts_clock.hpp"
 #include "avbts_osnet.hpp"
 #include "avbts_oslock.hpp"
-#include "windows_hal.hpp"
+#include "windows_rtx_hal.hpp"
 #include <tchar.h>
 
 #define MACSTR_LENGTH 17
