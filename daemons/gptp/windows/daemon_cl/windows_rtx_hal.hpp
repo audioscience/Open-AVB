@@ -184,34 +184,49 @@ public:
 class WindowsCondition : public OSCondition {
     friend class WindowsConditionFactory;
 private:
-    SRWLOCK lock;
-    CONDITION_VARIABLE condition;
+	HANDLE event;
+	LONG wait_count;
 protected:
     bool initialize() {
-        InitializeSRWLock( &lock );
-        InitializeConditionVariable( &condition );
+		wait_count = 0;
+		event = RtCreateEvent(
+					NULL,
+					TRUE,	// manual reset
+					FALSE,
+					NULL);
         return true;
     }
+	void up() {
+		InterlockedIncrement(&wait_count);
+	} 
+	void down() {
+		InterlockedDecrement(&wait_count);
+	} 
+	bool waiting() {
+		return wait_count > 0;
+	}
 public:
     bool wait_prelock() {
-        AcquireSRWLockExclusive( &lock );
         up();
         return true;
     }
     bool wait() {
-        BOOL result = SleepConditionVariableSRW( &condition, &lock, INFINITE, 0 );
+		DWORD result = RtWaitForSingleObject( event, INFINITE );
         bool ret = false;
-        if( result == TRUE ) {
+        if( result == WAIT_OBJECT_0 ) {
             down();
-            ReleaseSRWLockExclusive( &lock );
             ret = true;
         }
         return ret;
     }
     bool signal() {
-        AcquireSRWLockExclusive( &lock );
-        if( waiting() ) WakeAllConditionVariable( &condition );
-        ReleaseSRWLockExclusive( &lock );
+		// APC may cause waiting thread to miss
+		// event, so loop until wait_count == 0
+        while( waiting() ){
+			RtSetEvent(event);
+			Sleep(1);
+			RtResetEvent(event);
+		}
         return true;
     }
 };
