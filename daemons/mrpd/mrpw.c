@@ -155,32 +155,41 @@ struct netif *netif_open(int timeout_ms)
 
 	/* Retrieve the device list on the local machine */
 	if (pcap_findalldevs(&netif->alldevs, netif->errbuf) == -1) {
-		printf("Error finding interfaces\n");
+		fprintf(stderr,"Error finding interfaces\n");
 		goto error_return;
 	}
 
 	/* Print the list */
 	for (netif->d = netif->alldevs; netif->d; netif->d = netif->d->next) {
-		/*printf("%d. %s", ++i, d->name); */
-		printf("%d", ++i);
+		/*fprintf(stderr,"%d. %s", ++i, d->name); */
+		fprintf(stderr,"%d", ++i);
 		if (netif->d->description)
-			printf(" (%-70s)\n", netif->d->description);
+			fprintf(stderr," (%-70s)\n", netif->d->description);
 		else
-			printf(" (No description available)\n");
+			fprintf(stderr," (No description available)\n");
+
+		/*  use the RTX Virtual NIC if present */
+		if ( strstr(netif->d->description,"RTX Virtual") )
+			inum = i;
+
 	}
 	total_interfaces = i;
 
 	if (i == 0) {
-		printf
-		    ("\nNo interfaces found! Make sure WinPcap is installed.\n");
+		fprintf(stderr,"\nNo interfaces found! Make sure WinPcap is installed.\n");
 		goto error_return;
 	}
 
-	printf("Enter the interface number (1-%d):", i);
+#ifndef _SERVICE
+	fprintf(stderr,"Enter the interface number (1-%d):", i);
 	scanf_s("%d", &inum);
+#endif
+#ifdef _SERVICE
+	inum = 3;	/*SGT testing*/
+#endif
 
 	if (inum < 1 || inum > i) {
-		printf("\nInterface number out of range.\n");
+		fprintf(stderr,"\nInterface number out of range.\n");
 		/* Free the device list */
 		pcap_freealldevs(netif->alldevs);
 		goto error_return;
@@ -303,7 +312,7 @@ int netif_capture_frame(struct netif *net_if, uint8_t ** frame,
 
 int netif_send_frame(struct netif *net_if, uint8_t * frame, uint16_t length)
 {
-	//printf("TX frame: %d bytes\n", length);
+	//fprintf(stderr,"TX frame: %d bytes\n", length);
 	if (pcap_sendpacket(net_if->pcap_interface, frame, length) != 0) {
 		fprintf(stderr, "\nError sending the packet: \n",
 			pcap_geterr(net_if->pcap_interface));
@@ -328,8 +337,7 @@ DWORD WINAPI netif_thread(LPVOID lpParam)
 			que_push(que_wpcap, &d);
 		} else {
 			if (!SetEvent(pkt_events[pkt_event_wpcap_timeout])) {
-				printf
-				    ("SetEvent pkt_event_wpcap_timeout failed (%d)\n",
+				fprintf(stderr,"SetEvent pkt_event_wpcap_timeout failed (%d)\n",
 				     GetLastError());
 				return 1;
 			}
@@ -545,11 +553,11 @@ int process_ctl_msg(char *buf, int buflen, struct sockaddr_in *client)
 
 #if LOG_CLIENT_RECV
 	if (logging_enable)
-		printf("CMD:%s from CLNT %d\n", buf, client->sin_port);
+		fprintf(stderr,"CMD:%s from CLNT %d\n", buf, client->sin_port);
 #endif
 
 	if (buflen < 3) {
-		printf("buflen = %d!\b", buflen);
+		fprintf(stderr,"buflen = %d!\b", buflen);
 
 		return -1;
 	}
@@ -570,7 +578,7 @@ int process_ctl_msg(char *buf, int buflen, struct sockaddr_in *client)
 		msrp_bye(client);
 		break;
 	default:
-		printf("unrecognized command %s\n", buf);
+		fprintf(stderr,"unrecognized command %s\n", buf);
 		snprintf(respbuf, sizeof(respbuf) - 1, "ERC %s", buf);
 		mrpd_send_ctl_msg(client, respbuf, sizeof(respbuf));
 		return -1;
@@ -604,7 +612,7 @@ int mrpd_send_ctl_msg(struct sockaddr_in *client_addr,
 		return 0;
 
 #if LOG_CLIENT_SEND
-	printf("CTL MSG:%s to CLNT %d\n", notify_data,
+	fprintf(stderr,"CTL MSG:%s to CLNT %d\n", notify_data,
 		       client_addr->sin_port);
 #endif
 	rc = sendto(control_socket, notify_data, notify_len,
@@ -698,8 +706,7 @@ DWORD WINAPI ctl_thread(LPVOID lpParam)
 		} else {
 			free(s.msgbuf);
 			if (!SetEvent(pkt_events[pkt_event_localhost_timeout])) {
-				printf
-				    ("SetEvent pkt_event_localhost_timeout failed (%d)\n",
+				fprintf(stderr,"SetEvent pkt_event_localhost_timeout failed (%d)\n",
 				     GetLastError());
 				return 1;
 			}
@@ -837,7 +844,7 @@ int mrpw_run_once(void)
 		}
 
 		if (mrpd_timer_timeout(periodic_timer)) {
-			//printf("mrpd_timer_timeout(periodic_timer)\n");
+			//fprintf(stderr,"mrpd_timer_timeout(periodic_timer)\n");
 			if (mmrp_enable)
 				mmrp_event(MRP_EVENT_PERIODIC, NULL);
 			if (mvrp_enable)
@@ -880,7 +887,7 @@ int mrpw_run_once(void)
 		}
 		if (mrpd_timer_timeout(&timer_check_tick)) {
 			if (!SetEvent(pkt_events[loop_time_tick])) {
-				printf("SetEvent loop_time_tick failed (%d)\n",
+				fprintf(stderr,"SetEvent loop_time_tick failed (%d)\n",
 					GetLastError());
 				exit(-1);
 			}
@@ -888,7 +895,7 @@ int mrpw_run_once(void)
 		break;
 
 	case WAIT_OBJECT_0 + pkt_event_wpcap_timeout:
-		//printf("pkt_event_wpcap_timeout\n");
+		//fprintf(stderr,"pkt_event_wpcap_timeout\n");
 		break;
 
 	case WAIT_OBJECT_0 + pkt_event_localhost:
@@ -899,7 +906,7 @@ int mrpw_run_once(void)
 				&localhost_pkt.client_addr);
 		if (mrpd_timer_timeout(&timer_check_tick)) {
 			if (!SetEvent(pkt_events[loop_time_tick])) {
-				printf("SetEvent loop_time_tick failed (%d)\n",
+				fprintf(stderr,"SetEvent loop_time_tick failed (%d)\n",
 					GetLastError());
 				exit(-1);
 			}
@@ -907,11 +914,11 @@ int mrpw_run_once(void)
 		break;
 
 	case WAIT_OBJECT_0 + pkt_event_localhost_timeout:
-		//printf("pkt_event_localhost_timeout\n");
+		//fprintf(stderr,"pkt_event_localhost_timeout\n");
 		break;
 
 	default:
-		printf("Unknown event %d\n", dwEvent);
+		fprintf(stderr,"Unknown event %d\n", dwEvent);
 	}
 	return 0;
 }
@@ -998,6 +1005,7 @@ void process_events(void)
 	}
 }
 
+#ifndef _SERVICE
 int main(int argc, char *argv[])
 {
 	int status;
@@ -1021,6 +1029,7 @@ int main(int argc, char *argv[])
 	return status;
 
 }
+#endif
 
 void mrpd_log_printf(const char *fmt, ...)
 {
@@ -1034,10 +1043,10 @@ void mrpd_log_printf(const char *fmt, ...)
 	QueryPerformanceFrequency(&freq);
 	ms = (unsigned int)((count.QuadPart * 1000/freq.QuadPart) & 0xfffffff);
 
-	printf("MRPD %03d.%03d ", ms / 1000, ms % 1000);
+	fprintf(stderr,"MRPD %03d.%03d ", ms / 1000, ms % 1000);
 
 	va_start(arglist, fmt);
-	vprintf(fmt, arglist);
+	vfprintf(stderr, fmt, arglist);
 	va_end(arglist);
 
 }

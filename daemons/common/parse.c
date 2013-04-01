@@ -43,7 +43,7 @@
 #include "parse.h"
 
 #if 0
-#define parse_log(a,b) printf(a,b)
+#define parse_log(a,b) fprintf(stderr,a,b)
 #else
 #define parse_log(a,b)
 #endif
