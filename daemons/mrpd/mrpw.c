@@ -1005,10 +1005,40 @@ void process_events(void)
 	}
 }
 
-#ifndef _SERVICE
+#ifdef _SERVICE
+int mrpw_start( void )
+{
+	int status=0;
+
+	mrpd_log_printf("mrpw_start() 1\n");
+	status = mrpw_init_protocols();
+
+	if (status < 0 ){
+		mrpw_cleanup();
+		return status;
+	}
+
+	status = mrpw_init_threads();
+	if (status < 0 ){
+		mrpw_cleanup();
+		return status;
+	}
+	mrpd_log_printf("mrpw_start() 2\n");
+	return status;
+}
+
+int mrpw_stop( void )
+{
+	int status=0;
+
+	mrpw_cleanup();
+	return status;
+}
+
+#else
 int main(int argc, char *argv[])
 {
-	int status;
+	int status=0;
 
 	status = mrpw_init_protocols();
 
@@ -1043,10 +1073,45 @@ void mrpd_log_printf(const char *fmt, ...)
 	QueryPerformanceFrequency(&freq);
 	ms = (unsigned int)((count.QuadPart * 1000/freq.QuadPart) & 0xfffffff);
 
+#ifdef _SERVICE
+	{
+	HANDLE hEventSource = NULL;
+    LPCSTR lpszStrings[2] = { NULL, NULL };
+	char message1[256];
+	char message2[256];
+
+	sprintf(message1,"MRPD %03d.%03d ", ms / 1000, ms % 1000);
+
+	va_start(arglist, fmt);
+	vsprintf(message2, fmt, arglist);
+	va_end(arglist);
+	strcat(message1, message2);
+
+    hEventSource = RegisterEventSource(NULL, "[Debug] AudioScience AVB SRP Service");
+    if (hEventSource)
+    {
+        lpszStrings[0] = "[Debug] AudioScience AVB SRP Service";
+        lpszStrings[1] = message1;
+
+        ReportEvent(hEventSource,  // Event log handle
+            EVENTLOG_INFORMATION_TYPE,                 // Event type
+            0,                     // Event category
+            0,                     // Event identifier
+            NULL,                  // No security identifier
+            2,                     // Size of lpszStrings array
+            0,                     // No binary data
+            lpszStrings,           // Array of strings
+            NULL                   // No binary data
+            );
+
+        DeregisterEventSource(hEventSource);
+    }
+	}
+#else
 	fprintf(stderr,"MRPD %03d.%03d ", ms / 1000, ms % 1000);
 
 	va_start(arglist, fmt);
 	vfprintf(stderr, fmt, arglist);
 	va_end(arglist);
-
+#endif
 }
