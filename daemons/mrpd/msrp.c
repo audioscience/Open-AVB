@@ -394,7 +394,7 @@ int msrp_event(int event, struct msrp_attribute *rattrib)
 			rc = mrp_registrar_fsm(&(attrib->registrar),
 					       &(MSRP_db->mrp_db), event);
 			if (-1 == rc) {
-				fprintf(stderr,"MSRP registrar error on attrib->type = %s (%d)\n",
+				mrpd_log_error("MSRP registrar error on attrib->type = %s (%d)\n",
 						msrp_attrib_type_string(attrib->type),
 						attrib->type);
 			}
@@ -1011,7 +1011,7 @@ int msrp_recv_msg()
 				if ((mrpdu_vectorptr->FirstValue_VectorEvents +
 				     numvalues / 3) >= mrpdu_msg_eof) {
 					/* Malformed - runs off the end of the pdu */
-					fprintf(stderr,"bad talker adv PDU too long \n");
+					mrpd_log_error("bad talker adv PDU too long \n");
 					goto out;
 				}
 				memcpy(streamid_firstval,
@@ -1454,7 +1454,7 @@ int msrp_recv_msg()
 			 * we can seek for an endmark to recover .. but this version
 			 * dumps the entire packet as malformed
 			 */
-			fprintf(stderr,"################## unrecognized attribute type (%d)\n",
+			mrpd_log_error("################## unrecognized attribute type (%d)\n",
 			       mrpdu_msg->AttributeType);
 			goto out;
 		}

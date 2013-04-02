@@ -279,7 +279,7 @@ int mvrp_event(int event, struct mvrp_attribute *rattrib)
 			rc = mrp_registrar_fsm(&(attrib->registrar),
 					       &(MVRP_db->mrp_db), event);
 			if (-1 == rc) {
-				fprintf(stderr,"MVRP registrar error on attrib->attribute = %d\n",
+				mrpd_log_error("MVRP registrar error on attrib->attribute = %d\n",
 				     attrib->attribute);
 			}
 			break;

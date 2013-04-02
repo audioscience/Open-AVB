@@ -132,3 +132,4 @@ int mrpd_close_socket(SOCKET sock);
 int mrpd_recvmsgbuf(SOCKET sock, char **buf);
 
 void mrpd_log_printf(const char *fmt, ...);
+void mrpd_log_error(const char *fmt, ...);

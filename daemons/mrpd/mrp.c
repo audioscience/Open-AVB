@@ -362,7 +362,7 @@ int mrp_lvatimer_fsm(struct mrp_database *mrp_db, int event)
 		mrp_lvatimer_start(mrp_db);
 		break;
 	default:
-		fprintf(stderr,"mrp_lvatimer_fsm:unexpected event (%d)\n", event);
+		mrpd_log_error("mrp_lvatimer_fsm:unexpected event (%d)\n", event);
 		return -1;
 		break;
 	}
@@ -418,7 +418,7 @@ int mrp_periodictimer_fsm(struct mrp_database *mrp_db, int event)
 		}
 		break;
 	default:
-		fprintf(stderr,"mrp_periodictimer_fsm:unexpected event (%d)\n", event);
+		mrpd_log_error("mrp_periodictimer_fsm:unexpected event (%d)\n", event);
 		return;
 		break;
 	}
@@ -764,7 +764,7 @@ int mrp_applicant_fsm(struct mrp_database *mrp_db, mrp_applicant_attribute_t * a
 		break;
 
 	default:
-		fprintf(stderr,"mrp_applicant_fsm:unexpected event %s (%d)\n", mrp_event_string(event), event);
+		mrpd_log_error("mrp_applicant_fsm:unexpected event %s (%d)\n", mrp_event_string(event), event);
 		return -1;
 		break;
 	}
@@ -892,7 +892,7 @@ mrp_registrar_fsm(mrp_registrar_attribute_t * attrib,
 		/* ignore on soon to be deleted attributes */
 		break;
 	default:
-		fprintf(stderr,"mrp_registrar_fsm:unexpected event %s (%d)\n", mrp_event_string(event), event);
+		mrpd_log_error("mrp_registrar_fsm:unexpected event %s (%d)\n", mrp_event_string(event), event);
 		return -1;
 		break;
 	}
