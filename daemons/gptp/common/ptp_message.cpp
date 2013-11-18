@@ -458,6 +458,21 @@ PTPMessageCommon *buildPTPMessage
 
 		XPTPD_ERROR("Received unsupported message type, %d",
 			    (int)messageType);
+		{
+			int i;
+			XPTPD_INFO("Packet Dump:\n");
+			for (i = 0; i < size; ++i) {
+				fprintf(stderr, "%02.2x", 0xFF & (int)buf[i]);
+				if(i % 16 == 15)
+					fprintf(stderr, "\n");
+				else if (i % 8 == 7)
+					fprintf(stderr, "    ");
+				else
+					fprintf(stderr, "  ");
+			}
+			if (i % 8 != 0)
+				fprintf(stderr, "\n");
+		}
 
 		goto done;
 	}

@@ -896,10 +896,6 @@ void IEEE1588Port::becomeSlave( bool restart_syntonization ) {
 
   port_state = PTP_SLAVE;
 
-  /*clock->addEventTimer
-	  ( this, SYNC_RECEIPT_TIMEOUT_EXPIRES,
-		(SYNC_RECEIPT_TIMEOUT_MULTIPLIER*
-		 (unsigned long long)(pow((double)2,getSyncInterval())*1000000000.0)));*/
   clock->addEventTimer
 	  (this, ANNOUNCE_RECEIPT_TIMEOUT_EXPIRES,
 	   (ANNOUNCE_RECEIPT_TIMEOUT_MULTIPLIER*
