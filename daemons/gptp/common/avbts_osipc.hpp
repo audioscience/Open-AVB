@@ -49,10 +49,11 @@ class OS_IPC {
 public:
     virtual bool init( OS_IPC_ARG *arg = NULL ) = 0;
     virtual bool update
-	( int64_t  ml_phoffset,   int64_t ls_phoffset,
-	  FrequencyRatio  ml_freqoffset, FrequencyRatio ls_freq_offset,
-	  uint64_t local_time, uint32_t sync_count, uint32_t pdelay_count,
-	  PortState port_state ) = 0;
+	( struct masterToLocal master_to_local, struct localToSystem local_to_system, 
+		uint32_t sync_count, uint32_t pdelay_count,
+		PortState port_state ) = 0;
+	virtual bool setSharedAsCapable( bool asCapable ) = 0;
+	virtual bool updatePriority1(uint32_t *newPriority) = 0;
 	virtual ~OS_IPC() = 0;
 };
 

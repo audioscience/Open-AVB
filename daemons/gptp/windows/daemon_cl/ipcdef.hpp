@@ -38,7 +38,7 @@ POSSIBILITY OF SUCH DAMAGE.
 #include <windows.h>
 #include <stdint.h>
 #include <ptptypes.hpp>
-#include <minwinbase.h>
+//#include <minwinbase.h>
 #include <debugout.hpp>
 
 #define OUTSTANDING_MESSAGES 10

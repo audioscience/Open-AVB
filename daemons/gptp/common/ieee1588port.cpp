@@ -85,6 +85,7 @@ IEEE1588Port::IEEE1588Port
 	port_state = PTP_INITIALIZING;
 
 	asCapable = false;
+	clock->setSharedAsCapable(false);
 
 	announce_sequence_id = 0;
 	sync_sequence_id = 0;
@@ -156,6 +157,19 @@ bool IEEE1588Port::init_port()
 	port_ready_condition = condition_factory->createCondition();
 
 	return true;
+}
+
+void IEEE1588Port::setAsCapable(bool ascap) 
+{
+	if (ascap != asCapable) {
+		fprintf(stderr, "AsCapable: %s\n",
+				ascap == true ? "Enabled" : "Disabled");
+	}
+	if(!ascap){
+		_peer_offset_init = false;
+	}
+	asCapable = ascap;
+	clock->setSharedAsCapable(asCapable);
 }
 
 void IEEE1588Port::startPDelay() {
@@ -351,7 +365,7 @@ void IEEE1588Port::sendEventPort(uint8_t * buf, int size,
 				 PortIdentity * destIdentity)
 {
 	net_result rtx = port_send(buf, size, mcast_type, destIdentity, true);
-	if (rtx != net_succeed) {
+	if ((rtx != net_succeed) && (rtx != net_trfail)) {
 		XPTPD_ERROR("sendEventPort(): failure");
 	}
 
@@ -363,7 +377,7 @@ void IEEE1588Port::sendGeneralPort(uint8_t * buf, int size,
 				   PortIdentity * destIdentity)
 {
 	net_result rtx = port_send(buf, size, mcast_type, destIdentity, false);
-	if (rtx != net_succeed) {
+	if ((rtx != net_succeed)  && (rtx != net_trfail)) {
 		XPTPD_ERROR("sendGeneralPort(): failure");
 	}
 
@@ -714,16 +728,20 @@ void IEEE1588Port::processEvent(Event e)
 			break;
 	case SYNC_INTERVAL_TIMEOUT_EXPIRES:
 			XPTPD_INFO("SYNC_INTERVAL_TIMEOUT_EXPIRES occured");
+fprintf(stderr, "STO\n");
 			{
 				/* Set offset from master to zero, update device vs
 				   system time offset */
 				Timestamp system_time;
 				Timestamp device_time;
-				FrequencyRatio local_system_freq_offset;
-				int64_t local_system_offset;
+				Timestamp sync_timestamp;
+//				FrequencyRatio local_system_freq_offset;
+//				int64_t local_system_offset;
 				long long wait_time = 0;
 				
 				uint32_t local_clock, nominal_clock_rate;
+				struct masterToLocal master_to_local;
+				struct localToSystem local_to_system;
 
 				// Send a sync message and then a followup to broadcast
 				if (asCapable) {
@@ -736,7 +754,6 @@ void IEEE1588Port::processEvent(Event e)
 					XPTPD_INFO("Sent SYNC message");
 					
 					int ts_good;
-					Timestamp sync_timestamp;
 					unsigned sync_timestamp_counter_value;
 					int iter = TX_TIMEOUT_ITER;
 					long req = TX_TIMEOUT_BASE;
@@ -807,15 +824,21 @@ void IEEE1588Port::processEvent(Event e)
 					 system_time.seconds_ls, system_time.nanoseconds,
 					 device_time.seconds_ls, device_time.nanoseconds);
 				
-				local_system_offset =
-			    TIMESTAMP_TO_NS(system_time) -
-			    TIMESTAMP_TO_NS(device_time);
-			  local_system_freq_offset =
-			    clock->calcLocalSystemClockRateDifference
-			    ( device_time, system_time );
+//				local_system_offset = TIMESTAMP_TO_NS(system_time) -
+//									    TIMESTAMP_TO_NS(device_time);
+//			  local_system_freq_offset =
+//			    clock->calcLocalSystemClockRateDifference
+//			    ( device_time, system_time );
+
+				master_to_local.preciseOriginTimestamp = sync_timestamp;
+				master_to_local.sync_arrival = sync_timestamp;
+				master_to_local.freq_ratio =  1.0;
+				local_to_system.device_time = device_time;
+				local_to_system.system_time = system_time;
+				local_to_system.freq_ratio = clock->calcLocalSystemClockRateDifference( device_time, system_time );;
+
 			  clock->setMasterOffset
-				  (0, device_time, 1.0, local_system_offset,
-				   system_time, local_system_freq_offset, sync_count,
+				  (master_to_local, local_to_system, sync_count,
 				   pdelay_count, port_state );
 
 			  /* If accelerated_sync is non-zero then start 16 ms sync

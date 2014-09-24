@@ -53,6 +53,17 @@ struct ClockQuality {
 	int16_t offsetScaledLogVariance;
 };
 
+struct masterToLocal {
+	Timestamp		preciseOriginTimestamp;
+	Timestamp		sync_arrival;
+	FrequencyRatio	freq_ratio;
+};
+struct localToSystem {
+	Timestamp		device_time;
+	Timestamp		system_time;
+	FrequencyRatio	freq_ratio;
+};
+
 class IEEE1588Clock {
 private:
 	ClockIdentity clock_identity;
@@ -192,6 +203,10 @@ public:
 		return time_source;
 	}
 	
+	void setPriority1(unsigned char priorityOne) {
+		priority1 = priorityOne;
+	}
+
 	unsigned char getPriority1(void) {
 		return priority1;
 	}
@@ -228,13 +243,14 @@ public:
 	( Timestamp master_time, Timestamp sync_time );
 	FrequencyRatio calcLocalSystemClockRateDifference
 	( Timestamp local_time, Timestamp system_time );
+	FrequencyRatio calcClockFrequencyRatio
+	( Timestamp denominator, Timestamp numerator );
+
+	void setSharedAsCapable(bool asCapable);
+	bool checkPriority1Update(uint32_t *newPriority);
 
 	void setMasterOffset
-	( int64_t master_local_offset, Timestamp local_time,
-	  FrequencyRatio master_local_freq_offset,
-	  int64_t local_system_offset,
-	  Timestamp system_time,
-	  FrequencyRatio local_system_freq_offset,
+	( struct masterToLocal master_to_local, struct localToSystem local_to_system,
 	  unsigned sync_count, unsigned pdelay_count, PortState port_state );
 	
 	ClockIdentity getClockIdentity() {
