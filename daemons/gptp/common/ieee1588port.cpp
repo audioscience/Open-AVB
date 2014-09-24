@@ -85,6 +85,7 @@ IEEE1588Port::IEEE1588Port
 	port_state = PTP_INITIALIZING;
 
 	asCapable = false;
+	clock->setSharedAsCapable(false);
 
 	announce_sequence_id = 0;
 	sync_sequence_id = 0;
@@ -156,6 +157,19 @@ bool IEEE1588Port::init_port()
 	port_ready_condition = condition_factory->createCondition();
 
 	return true;
+}
+
+void IEEE1588Port::setAsCapable(bool ascap) 
+{
+	if (ascap != asCapable) {
+		fprintf(stderr, "AsCapable: %s\n",
+				ascap == true ? "Enabled" : "Disabled");
+	}
+	if(!ascap){
+		_peer_offset_init = false;
+	}
+	asCapable = ascap;
+	clock->setSharedAsCapable(asCapable);
 }
 
 void IEEE1588Port::startPDelay() {
@@ -351,7 +365,7 @@ void IEEE1588Port::sendEventPort(uint8_t * buf, int size,
 				 PortIdentity * destIdentity)
 {
 	net_result rtx = port_send(buf, size, mcast_type, destIdentity, true);
-	if (rtx != net_succeed) {
+	if ((rtx != net_succeed) && (rtx != net_trfail)) {
 		XPTPD_ERROR("sendEventPort(): failure");
 	}
 
@@ -363,7 +377,7 @@ void IEEE1588Port::sendGeneralPort(uint8_t * buf, int size,
 				   PortIdentity * destIdentity)
 {
 	net_result rtx = port_send(buf, size, mcast_type, destIdentity, false);
-	if (rtx != net_succeed) {
+	if ((rtx != net_succeed)  && (rtx != net_trfail)) {
 		XPTPD_ERROR("sendGeneralPort(): failure");
 	}
 

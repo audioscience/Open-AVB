@@ -239,16 +239,6 @@ class IEEE1588Port {
 	OSTimerFactory *getTimerFactory() {
 		return timer_factory;
 	}
-	void setAsCapable(bool ascap) {
-		if (ascap != asCapable) {
-			fprintf(stderr, "AsCapable: %s\n",
-					ascap == true ? "Enabled" : "Disabled");
-		}
-		if(!ascap){
-			_peer_offset_init = false;
-		}
-		asCapable = ascap;
-	}
 	
 	~IEEE1588Port();
 	IEEE1588Port
@@ -278,6 +268,8 @@ class IEEE1588Port {
 	void addForeignMaster(PTPMessageAnnounce * msg);
 	void removeForeignMaster(PTPMessageAnnounce * msg);
 	void removeForeignMasterAll(void);
+
+	void setAsCapable(bool ascap);
 
 	void addQualifiedAnnounce(PTPMessageAnnounce * msg) {
 		if( qualified_announce != NULL ) delete qualified_announce;

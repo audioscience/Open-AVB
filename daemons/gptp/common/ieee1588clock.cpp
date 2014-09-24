@@ -30,7 +30,6 @@
   POSSIBILITY OF SUCH DAMAGE.
 
 ******************************************************************************/
-
 #include <ieee1588.hpp>
 
 #include <avbts_clock.hpp>
@@ -309,6 +308,26 @@ FrequencyRatio IEEE1588Clock::calcMasterLocalClockRateDifference( Timestamp mast
 	_prev_master_time = master_time;
 
 	return ppt_offset;
+}
+
+void IEEE1588Clock::setSharedAsCapable(bool asCapable)
+{
+	if ( ipc != NULL ) 
+	{
+		ipc->setSharedAsCapable(asCapable);
+	}
+}
+
+bool IEEE1588Clock::checkPriority1Update(uint32_t *newPriority)
+{
+	bool needUpdate = false;
+
+	if ( ipc != NULL ) 
+	{
+		needUpdate = ipc->updatePriority1(newPriority);
+	}
+
+	return needUpdate;
 }
 
 void IEEE1588Clock::setMasterOffset

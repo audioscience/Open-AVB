@@ -189,6 +189,10 @@ public:
 		return time_source;
 	}
 	
+	void setPriority1(unsigned char priorityOne) {
+		priority1 = priorityOne;
+	}
+
 	unsigned char getPriority1(void) {
 		return priority1;
 	}
@@ -225,6 +229,9 @@ public:
 	( Timestamp master_time, Timestamp sync_time );
 	FrequencyRatio calcLocalSystemClockRateDifference
 	( Timestamp local_time, Timestamp system_time );
+
+	void setSharedAsCapable(bool asCapable);
+	bool checkPriority1Update(uint32_t *newPriority);
 
 	void setMasterOffset
 	( int64_t master_local_offset, Timestamp local_time,
