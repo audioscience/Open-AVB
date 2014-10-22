@@ -756,7 +756,7 @@ int msrp_recv_msg()
 
 	endmarks = 0;
 
-	while (mrpdu_msg_ptr < (mrpdu_msg_eof - 2)) {
+	while (mrpdu_msg_ptr < (mrpdu_msg_eof - MRPDU_ENDMARK_SZ)) {
 		mrpdu_msg = (mrpdu_message_t *) mrpdu_msg_ptr;
 		if ((mrpdu_msg->AttributeType == 0) &&
 		    (mrpdu_msg->AttributeLength == 0)) {
@@ -2027,7 +2027,7 @@ msrp_emit_domainvectors(unsigned char *msgbuf, unsigned char *msgbuf_eof,
 			}
 
 			if (&(mrpdu_vectorptr->FirstValue_VectorEvents[vectidx])
-			    > (mrpdu_msg_eof - 2))
+			    > (mrpdu_msg_eof - MRPDU_ENDMARK_SZ))
 				goto oops;
 
 			vattrib = vattrib->next;
@@ -2045,7 +2045,7 @@ msrp_emit_domainvectors(unsigned char *msgbuf, unsigned char *msgbuf_eof,
 		}
 
 		if (&(mrpdu_vectorptr->FirstValue_VectorEvents[vectidx]) >
-		    (mrpdu_msg_eof - 2))
+		    (mrpdu_msg_eof - MRPDU_ENDMARK_SZ))
 			goto oops;
 
 		mrpdu_vectorptr->VectorHeader = MRPDU_VECT_NUMVALUES(numvalues);
@@ -2394,7 +2394,7 @@ msrp_emit_talkervectors(unsigned char *msgbuf, unsigned char *msgbuf_eof,
 		}
 
 		if (&(mrpdu_vectorptr->FirstValue_VectorEvents[vectidx]) >
-		    (mrpdu_msg_eof - 2))
+		    (mrpdu_msg_eof - MRPDU_ENDMARK_SZ))
 			goto oops;
 
 		mrpdu_vectorptr->VectorHeader = MRPDU_VECT_NUMVALUES(numvalues);
@@ -2702,7 +2702,7 @@ msrp_emit_listenvectors(unsigned char *msgbuf, unsigned char *msgbuf_eof,
 		     listen_declare_idx += 4) {
 
 			if (&(mrpdu_vectorptr->FirstValue_VectorEvents[vectidx])
-			    > (mrpdu_msg_eof - 2))
+			    > (mrpdu_msg_eof - MRPDU_ENDMARK_SZ))
 				goto oops;
 
 			vect_4pack =
@@ -2866,7 +2866,7 @@ int msrp_txpdu(void)
 
 	mrpdu_msg_ptr += bytes;
 
-	if (mrpdu_msg_ptr >= (mrpdu_msg_eof - 2))
+	if (mrpdu_msg_ptr >= (mrpdu_msg_eof - MRPDU_ENDMARK_SZ))
 		goto out;
 
 	rc = msrp_emit_listenvectors(mrpdu_msg_ptr, mrpdu_msg_eof, &bytes, lva);
