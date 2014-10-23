@@ -1860,9 +1860,10 @@ msrp_emit_domainvectors(unsigned char *msgbuf, unsigned char *msgbuf_eof,
 	unsigned char *mrpdu_msg_ptr = msgbuf;
 	unsigned char *mrpdu_msg_eof = msgbuf_eof;
 	unsigned int attrib_found_flag = 0;
+	unsigned int vector_size = 5;
 
 	/* need at least 5 bytes for a single vector */
-	if (mrpdu_msg_ptr > (mrpdu_msg_eof - 5))
+	if (mrpdu_msg_ptr > (mrpdu_msg_eof - vector_size))
 		goto oops;
 
 	mrpdu_msg = (mrpdu_message_t *) mrpdu_msg_ptr;
@@ -1873,7 +1874,7 @@ msrp_emit_domainvectors(unsigned char *msgbuf, unsigned char *msgbuf_eof,
 
 	mrpdu_vectorptr = (mrpdu_vectorattrib_t *) & (mrpdu_msg->Data[2]);
 
-	while ((mrpdu_msg_ptr < (mrpdu_msg_eof - 2)) && (NULL != attrib)) {
+	while ((mrpdu_msg_ptr < (mrpdu_msg_eof - vector_size - MRPDU_ENDMARK_SZ)) && (NULL != attrib)) {
 
 		if (MSRP_DOMAIN_TYPE != attrib->type) {
 			attrib = attrib->next;
@@ -1884,8 +1885,8 @@ msrp_emit_domainvectors(unsigned char *msgbuf, unsigned char *msgbuf_eof,
 			attrib = attrib->next;
 			continue;
 		}
+		attrib->applicant.tx = 0;
 		if (MRP_ENCODE_OPTIONAL == attrib->applicant.encode) {
-			attrib->applicant.tx = 0;
 			attrib = attrib->next;
 			continue;
 		}
@@ -2475,11 +2476,12 @@ msrp_emit_listenvectors(unsigned char *msgbuf, unsigned char *msgbuf_eof,
 	int listen_declare_end = 0;
 	uint8_t streamid_firstval[8];
 	struct msrp_attribute *attrib, *vattrib;
+	unsigned int vector_size = 13;
 	int mac_eq;
 	unsigned int attrib_found_flag = 0;
 
 	/* need at least 13 bytes for a single vector */
-	if (mrpdu_msg_ptr > (mrpdu_msg_eof - 13))
+	if (mrpdu_msg_ptr > (mrpdu_msg_eof - vector_size))
 		goto oops;
 
 	mrpdu_msg = (mrpdu_message_t *) mrpdu_msg_ptr;
@@ -2504,7 +2506,7 @@ msrp_emit_listenvectors(unsigned char *msgbuf, unsigned char *msgbuf_eof,
 	attrib = MSRP_db->attrib_list;
 	mrpdu_vectorptr = (mrpdu_vectorattrib_t *) & (mrpdu_msg->Data[2]);
 
-	while ((mrpdu_msg_ptr < (mrpdu_msg_eof - 2)) && (NULL != attrib)) {
+	while ((mrpdu_msg_ptr < (mrpdu_msg_eof - vector_size -MRPDU_ENDMARK_SZ)) && (NULL != attrib)) {
 
 		if (MSRP_LISTENER_TYPE != attrib->type) {
 			attrib = attrib->next;
@@ -2512,6 +2514,12 @@ msrp_emit_listenvectors(unsigned char *msgbuf, unsigned char *msgbuf_eof,
 		}
 
 		if (0 == attrib->applicant.tx) {
+			attrib = attrib->next;
+			continue;
+		}
+
+		attrib->applicant.tx = 0;
+		if (MRP_ENCODE_OPTIONAL == attrib->applicant.encode) {
 			attrib = attrib->next;
 			continue;
 		}
@@ -2677,7 +2685,7 @@ msrp_emit_listenvectors(unsigned char *msgbuf, unsigned char *msgbuf_eof,
 			}
 
 			if (&(mrpdu_vectorptr->FirstValue_VectorEvents[vectidx])
-			    > (mrpdu_msg_eof - 2))
+				> (mrpdu_msg_eof - MRPDU_ENDMARK_SZ))
 				goto oops;
 
 			vattrib = vattrib->next;
