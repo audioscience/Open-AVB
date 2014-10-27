@@ -234,12 +234,13 @@ public:
 	bool checkPriority1Update(uint32_t *newPriority);
 
 	void setMasterOffset
-	( int64_t master_local_offset, Timestamp local_time,
-	  FrequencyRatio master_local_freq_offset,
-	  int64_t local_system_offset,
-	  Timestamp system_time,
-	  FrequencyRatio local_system_freq_offset,
-	  unsigned sync_count, unsigned pdelay_count, PortState port_state );
+	( Timestamp master_local_master_time,
+	  Timestamp master_local_local_time,
+	  FrequencyRatio master_local_freq_ratio,
+	  Timestamp local_system_local_time,
+	  Timestamp local_system_system_time,
+	  FrequencyRatio local_system_freq_ratio,
+	  uint32_t nominal_clock_rate, uint32_t local_clock);
 	
 	ClockIdentity getClockIdentity() {
 		return clock_identity;
