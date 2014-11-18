@@ -331,21 +331,14 @@ bool IEEE1588Clock::checkPriority1Update(uint32_t *newPriority)
 }
 
 void IEEE1588Clock::setMasterOffset
-( Timestamp master_local_master_time, Timestamp master_local_local_time,
-  FrequencyRatio master_local_freq_ratio,
-  Timestamp local_system_local_time, Timestamp local_system_system_time,
-  FrequencyRatio local_system_freq_ratio,
+( struct time_parms master_to_local, struct time_parms system_to_local,
   unsigned sync_count, unsigned pdelay_count, PortState port_state )
 {
-	_master_local_freq_offset = master_local_freq_offset;
-	_local_system_freq_offset = local_system_freq_offset;
-
 	if( ipc != NULL ) ipc->update
-		( master_local_offset, local_system_offset, master_local_freq_offset,
-		  local_system_freq_offset, TIMESTAMP_TO_NS(local_time), sync_count,
+		( master_to_local, system_to_local, sync_count,
 		  pdelay_count, port_state );
 
-	if( master_local_offset == 0 && master_local_freq_offset == 1.0 ) {
+	if( master_to_local.freq_ratio == 1.0 ) {
 		return;
 	}
 
@@ -357,16 +350,16 @@ void IEEE1588Clock::setMasterOffset
 				   in progress */
 				getTxLockAll();
 				_timestamper->HWTimestamper_adjclockphase
-					( -master_local_offset );
+					( -master_to_local.freq_ratio );
 				_master_local_freq_offset_init = false;
 				putTxLockAll();
-				master_local_offset = 0;
+				master_to_local.freq_ratio = 0;
 			}
 		}
 		// Adjust for frequency offset
-		long double phase_error = (long double) -master_local_offset;
+		long double phase_error = (long double) -master_to_local.freq_ratio;
 		_ppm += (float) (INTEGRAL*phase_error +
-			 PROPORTIONAL*((master_local_freq_offset-1.0)*1000000));
+			 PROPORTIONAL*((master_to_local.freq_ratio-1.0)*1000000));
 		if( _ppm < LOWER_FREQ_LIMIT ) _ppm = LOWER_FREQ_LIMIT;
 		if( _ppm > UPPER_FREQ_LIMIT ) _ppm = UPPER_FREQ_LIMIT;
 		if( _timestamper ) {
