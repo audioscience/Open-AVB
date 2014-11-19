@@ -53,9 +53,14 @@ struct ClockQuality {
 	int16_t offsetScaledLogVariance;
 };
 
-struct time_parms{
-	Timestamp		time1;
-	Timestamp		time2;
+struct masterToLocal {
+	Timestamp		preciseOriginTimestamp;
+	Timestamp		sync_arrival;
+	FrequencyRatio	freq_ratio;
+};
+struct localToSystem {
+	Timestamp		device_time;
+	Timestamp		system_time;
 	FrequencyRatio	freq_ratio;
 };
 
@@ -242,7 +247,7 @@ public:
 	bool checkPriority1Update(uint32_t *newPriority);
 
 	void setMasterOffset
-	( struct time_parms master_to_local, struct time_parms system_to_local,
+	( struct masterToLocal master_to_local, struct localToSystem local_to_system,
 	  unsigned sync_count, unsigned pdelay_count, PortState port_state );
 	
 	ClockIdentity getClockIdentity() {

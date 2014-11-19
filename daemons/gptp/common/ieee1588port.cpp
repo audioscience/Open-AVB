@@ -735,13 +735,13 @@ fprintf(stderr, "STO\n");
 				Timestamp system_time;
 				Timestamp device_time;
 				Timestamp sync_timestamp;
-				FrequencyRatio local_system_freq_offset;
-				int64_t local_system_offset;
+//				FrequencyRatio local_system_freq_offset;
+//				int64_t local_system_offset;
 				long long wait_time = 0;
 				
 				uint32_t local_clock, nominal_clock_rate;
-struct time_parms master_to_local;
-struct time_parms local_to_system;
+				struct masterToLocal master_to_local;
+				struct localToSystem local_to_system;
 
 				// Send a sync message and then a followup to broadcast
 				if (asCapable) {
@@ -824,19 +824,18 @@ struct time_parms local_to_system;
 					 system_time.seconds_ls, system_time.nanoseconds,
 					 device_time.seconds_ls, device_time.nanoseconds);
 				
-				local_system_offset =
-			    TIMESTAMP_TO_NS(system_time) -
-			    TIMESTAMP_TO_NS(device_time);
-			  local_system_freq_offset =
-			    clock->calcLocalSystemClockRateDifference
-			    ( device_time, system_time );
+//				local_system_offset = TIMESTAMP_TO_NS(system_time) -
+//									    TIMESTAMP_TO_NS(device_time);
+//			  local_system_freq_offset =
+//			    clock->calcLocalSystemClockRateDifference
+//			    ( device_time, system_time );
 
-		master_to_local.time1 = sync_timestamp;
-		master_to_local.time2 = sync_timestamp;
-		master_to_local.freq_ratio =  1.0;
-		local_to_system.time1 = device_time;
-		local_to_system.time2 = system_time;
-		local_to_system.freq_ratio = clock->calcLocalSystemClockRateDifference( device_time, system_time );;
+				master_to_local.preciseOriginTimestamp = sync_timestamp;
+				master_to_local.sync_arrival = sync_timestamp;
+				master_to_local.freq_ratio =  1.0;
+				local_to_system.device_time = device_time;
+				local_to_system.system_time = system_time;
+				local_to_system.freq_ratio = clock->calcLocalSystemClockRateDifference( device_time, system_time );;
 
 			  clock->setMasterOffset
 				  (master_to_local, local_to_system, sync_count,

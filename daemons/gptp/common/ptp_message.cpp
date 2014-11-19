@@ -909,15 +909,15 @@ void PTPMessageFollowUp::processMessage(IEEE1588Port * port)
 	Timestamp device_time(0, 0, 0);
 
 //	signed long long local_system_offset;
-	signed long long scalar_offset;
+//	signed long long scalar_offset;
 
 //	FrequencyRatio local_clock_adjustment;
 //	FrequencyRatio local_system_freq_offset;
-	FrequencyRatio master_local_freq_offset;
-	int correction;
+//	FrequencyRatio master_local_freq_offset;
+//	int correction;
 
-	struct time_parms master_to_local;
-	struct time_parms local_to_system;
+	struct masterToLocal master_to_local;
+	struct localToSystem local_to_system;
 
 	XPTPD_INFO("Processing a follow-up message");
 
@@ -956,7 +956,7 @@ void PTPMessageFollowUp::processMessage(IEEE1588Port * port)
 	if ((delay = port->getLinkDelay()) == 3600000000000) {
 		goto done;
 	}
-
+#if 0
 	master_local_freq_offset  =  tlv.getRateOffset();
 	master_local_freq_offset /= 2ULL << 41;
 	master_local_freq_offset += 1.0;
@@ -977,7 +977,7 @@ void PTPMessageFollowUp::processMessage(IEEE1588Port * port)
 		 delay);
 	XPTPD_INFO
 		("FollowUp Scalar = %lld", scalar_offset);
-
+#endif
 	/* Otherwise synchronize clock with approximate time from Sync message */
 	uint32_t local_clock, nominal_clock_rate;
 //	uint32_t device_sync_time_offset;
@@ -1020,25 +1020,25 @@ void PTPMessageFollowUp::processMessage(IEEE1588Port * port)
 //		local_system_offset =
 //			TIMESTAMP_TO_NS(system_time) - TIMESTAMP_TO_NS(sync_arrival);
 
-		master_to_local.time1 = preciseOriginTimestamp;
-		master_to_local.time2 = sync_arrival;
+		master_to_local.preciseOriginTimestamp = preciseOriginTimestamp;
+		master_to_local.sync_arrival = sync_arrival;
 		master_to_local.freq_ratio =  port->getClock()->calcMasterLocalClockRateDifference( preciseOriginTimestamp, sync_arrival );
-		local_to_system.time1 = device_time;
-		local_to_system.time2 = system_time;
+		local_to_system.device_time = device_time;
+		local_to_system.system_time = system_time;
 		local_to_system.freq_ratio = port->getClock()->calcLocalSystemClockRateDifference( device_time, system_time );;
 
 lla3 = lla2;
 lla2 = lla1;
-lla1 = TIMESTAMP_TO_NS(master_to_local.time1);
+lla1 = TIMESTAMP_TO_NS(master_to_local.preciseOriginTimestamp);
 llb3 = llb2;
 llb2 = llb1;
-llb1 = TIMESTAMP_TO_NS(master_to_local.time2);
+llb1 = TIMESTAMP_TO_NS(master_to_local.sync_arrival);
 llc3 = llc2;
 llc2 = llc1;
-llc1 = TIMESTAMP_TO_NS(local_to_system.time1);
+llc1 = TIMESTAMP_TO_NS(local_to_system.device_time);
 lld3 = lld2;
 lld2 = lld1;
-lld1 = TIMESTAMP_TO_NS(local_to_system.time2);
+lld1 = TIMESTAMP_TO_NS(local_to_system.system_time);
 lda3 = lda2;
 lda2 = lda1;
 lda1 = master_to_local.freq_ratio;
@@ -1048,7 +1048,7 @@ ldb1 = local_to_system.freq_ratio;
 
 if (((lla1-lla2) > UPPER_LIMIT) || (((lla1-lla2) < LOWER_LIMIT) && (((lla1-lla2) > SHORT_CYCLE_UPPER) || ((lla1-lla2) < SHORT_CYCLE_LOWER))))
 {
-	fprintf(stderr, "***** MtoL1: %llu  T1: %llu  Delta: %llu     %d  %llu\n", lla2, lla1, (lla1 - lla2), correction, delay);
+	fprintf(stderr, "***** MtoL1: %llu  T1: %llu  Delta: %llu      %llu\n", lla2, lla1, (lla1 - lla2), delay);
 }
 if (((llb1-llb2) > UPPER_LIMIT) || (((llb1-llb2) < LOWER_LIMIT) && (((llb1-llb2) > SHORT_CYCLE_UPPER) || ((llb1-llb2) < SHORT_CYCLE_LOWER))))
 {

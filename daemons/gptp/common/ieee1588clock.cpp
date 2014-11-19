@@ -331,11 +331,11 @@ bool IEEE1588Clock::checkPriority1Update(uint32_t *newPriority)
 }
 
 void IEEE1588Clock::setMasterOffset
-( struct time_parms master_to_local, struct time_parms system_to_local,
+( struct masterToLocal master_to_local, struct localToSystem local_to_system,
   unsigned sync_count, unsigned pdelay_count, PortState port_state )
 {
 	if( ipc != NULL ) ipc->update
-		( master_to_local, system_to_local, sync_count,
+		( master_to_local, local_to_system, sync_count,
 		  pdelay_count, port_state );
 
 	if( master_to_local.freq_ratio == 1.0 ) {

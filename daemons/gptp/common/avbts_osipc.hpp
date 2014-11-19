@@ -49,7 +49,7 @@ class OS_IPC {
 public:
     virtual bool init( OS_IPC_ARG *arg = NULL ) = 0;
     virtual bool update
-	( struct time_parms master_to_local, struct time_parms system_to_local, 
+	( struct masterToLocal master_to_local, struct localToSystem local_to_system, 
 		uint32_t sync_count, uint32_t pdelay_count,
 		PortState port_state ) = 0;
 	virtual bool setSharedAsCapable( bool asCapable ) = 0;
