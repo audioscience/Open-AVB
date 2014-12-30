@@ -68,8 +68,6 @@ bool PTPMessageCommon::isSenderEqual(PortIdentity portIdentity)
 	return portIdentity == *sourcePortIdentity;
 }
 
-long long currentNanos;
-long long oldNanos;
 
 PTPMessageCommon *buildPTPMessage
 (char *buf, int size, LinkLayerAddress * remote, IEEE1588Port * port)
@@ -229,16 +227,6 @@ PTPMessageCommon *buildPTPMessage
 			followup_msg->preciseOriginTimestamp.nanoseconds =
 			    PLAT_ntohl(followup_msg->
 				       preciseOriginTimestamp.nanoseconds);
-
-currentNanos = ((long long)(followup_msg->preciseOriginTimestamp.seconds_ls)) *1000000000 + (long long)followup_msg->preciseOriginTimestamp.nanoseconds;
-if (((currentNanos - oldNanos) > 135000000) || 
-	((currentNanos - oldNanos) < 61000000) || 
-	(((currentNanos - oldNanos) < 119000000) && ((currentNanos - oldNanos) > 66000000)))
-{
-	RtPrintf("\n----- Bad  %llu %llu  %ld\n", oldNanos, currentNanos, (currentNanos - oldNanos));
-}
-oldNanos = currentNanos;
-
 			memcpy( &(followup_msg->tlv), buf+PTP_FOLLOWUP_LENGTH, sizeof(followup_msg->tlv) );
 
 			msg = followup_msg;
@@ -705,8 +693,6 @@ void PTPMessageSync::sendPort(IEEE1588Port * port, PortIdentity * destIdentity)
 	stepsRemoved = 0;
 	timeSource = port->getClock()->getTimeSource();
 	clock_identity = port->getClock()->getGrandmasterClockIdentity();
-	clock_identity.getIdentityString(grandmasterIdentity);
-
 	logMeanMessageInterval = port->getAnnounceInterval();
 	return;
 }
@@ -876,31 +862,8 @@ void PTPMessageFollowUp::sendPort(IEEE1588Port * port,
 	return;
 }
 
-long long lla1;
-long long lla2;
-long long lla3;
-long long llb1;
-long long llb2;
-long long llb3;
-long long llc1;
-long long llc2;
-long long llc3;
-long long lld1;
-long long lld2;
-long long lld3;
-long double lda1;
-long double lda2;
-long double lda3;
-long double ldb1;
-long double ldb2;
-long double ldb3;
 
-
-#define UPPER_LIMIT 140000000
-#define LOWER_LIMIT 110000000
-#define SHORT_CYCLE_UPPER 65000000
-#define SHORT_CYCLE_LOWER 61000000
-
+#ifdef OLD_GPTP
 void PTPMessageFollowUp::processMessage(IEEE1588Port * port)
 {
 	uint64_t delay;
@@ -908,13 +871,145 @@ void PTPMessageFollowUp::processMessage(IEEE1588Port * port)
 	Timestamp system_time(0, 0, 0);
 	Timestamp device_time(0, 0, 0);
 
-//	signed long long local_system_offset;
-//	signed long long scalar_offset;
+	signed long long local_system_offset;
+	signed long long scalar_offset;
 
-//	FrequencyRatio local_clock_adjustment;
-//	FrequencyRatio local_system_freq_offset;
-//	FrequencyRatio master_local_freq_offset;
-//	int correction;
+	FrequencyRatio local_clock_adjustment;
+	FrequencyRatio local_system_freq_offset;
+	FrequencyRatio master_local_freq_offset;
+	int correction;
+
+	XPTPD_INFO("Processing a follow-up message");
+
+	// Expire any SYNC_RECEIPT timers that exist
+	port->getClock()->deleteEventTimerLocked
+		(port, SYNC_RECEIPT_TIMEOUT_EXPIRES);
+
+	if (port->getPortState() == PTP_DISABLED ) {
+		// Do nothing Sync messages should be ignored when in this state
+		return;
+	}
+	if (port->getPortState() == PTP_FAULTY) {
+		// According to spec recovery is implementation specific
+		port->recoverPort();
+		return;
+	}
+
+	PortIdentity sync_id;
+	PTPMessageSync *sync = port->getLastSync();
+	if (sync == NULL) {
+		XPTPD_ERROR("Received Follow Up but there is no sync message");
+		return;
+	}
+	sync->getPortIdentity(&sync_id);
+
+	if (sync->getSequenceId() != sequenceId || sync_id != *sourcePortIdentity)
+	{
+		XPTPD_ERROR
+		    ("Received Follow Up but cannot find corresponding Sync");
+		goto done;
+	}
+
+	sync_arrival = sync->getTimestamp();
+
+	delay = port->getLinkDelay();
+	if ((delay = port->getLinkDelay()) == 3600000000000) {
+		goto done;
+	}
+
+	master_local_freq_offset  =  tlv.getRateOffset();
+	master_local_freq_offset /= 2ULL << 41;
+	master_local_freq_offset += 1.0;
+	master_local_freq_offset /= port->getPeerRateOffset();
+
+	correctionField = (uint64_t)
+		((correctionField >> 16)/master_local_freq_offset);
+	correction = (int) (delay + correctionField);
+	
+	if( correction > 0 )
+	  TIMESTAMP_ADD_NS( preciseOriginTimestamp, correction );
+	else TIMESTAMP_SUB_NS( preciseOriginTimestamp, -correction );
+	scalar_offset  = TIMESTAMP_TO_NS( sync_arrival );
+	scalar_offset -= TIMESTAMP_TO_NS( preciseOriginTimestamp );
+
+	XPTPD_INFO
+		("Followup Correction Field: %Ld,%lu", correctionField >> 16,
+		 delay);
+	XPTPD_INFO
+		("FollowUp Scalar = %lld", scalar_offset);
+
+	/* Otherwise synchronize clock with approximate time from Sync message */
+	uint32_t local_clock, nominal_clock_rate;
+	uint32_t device_sync_time_offset;
+
+	port->getDeviceTime(system_time, device_time, local_clock,
+			    nominal_clock_rate);
+	XPTPD_INFO
+		( "Device Time = %llu,System Time = %llu\n",
+		  TIMESTAMP_TO_NS(device_time), TIMESTAMP_TO_NS(system_time));
+
+	/* Adjust local_clock to correspond to sync_arrival */
+	device_sync_time_offset =
+	    TIMESTAMP_TO_NS(device_time) - TIMESTAMP_TO_NS(sync_arrival);
+
+	XPTPD_INFO
+	    ("ptp_message::FollowUp::processMessage System time: %u,%u "
+		 "Device Time: %u,%u",
+	     system_time.seconds_ls, system_time.nanoseconds,
+	     device_time.seconds_ls, device_time.nanoseconds);
+
+	local_clock_adjustment =
+	  port->getClock()->
+	  calcMasterLocalClockRateDifference
+	  ( preciseOriginTimestamp, sync_arrival );
+
+	if( port->getPortState() != PTP_MASTER ) {
+		port->incSyncCount();
+		/* Do not call calcLocalSystemClockRateDifference it updates state
+		   global to the clock object and if we are master then the network 
+		   is transitioning to us not being master but the master process
+		   is still running locally */
+		local_system_freq_offset =
+			port->getClock()
+			->calcLocalSystemClockRateDifference
+			( device_time, system_time );
+		TIMESTAMP_SUB_NS
+			( system_time, (uint64_t)
+			  (((FrequencyRatio) device_sync_time_offset)/
+			   local_system_freq_offset) );
+		local_system_offset =
+			TIMESTAMP_TO_NS(system_time) - TIMESTAMP_TO_NS(sync_arrival);
+
+		port->getClock()->setMasterOffset
+			( scalar_offset, sync_arrival, local_clock_adjustment,
+			  local_system_offset, system_time, local_system_freq_offset,
+			  port->getSyncCount(), port->getPdelayCount(),
+			  port->getPortState() );
+		port->syncDone();
+		// Restart the SYNC_RECEIPT timer
+		port->getClock()->addEventTimerLocked
+			(port, SYNC_RECEIPT_TIMEOUT_EXPIRES, (unsigned long long)
+			 (SYNC_RECEIPT_TIMEOUT_MULTIPLIER *
+			  ((double) pow((double)2, port->getSyncInterval()) *
+			   1000000000.0)));
+	}
+
+done:
+	_gc = true;
+	port->setLastSync(NULL);
+	delete sync;
+	
+	return;
+}
+
+#else
+
+void PTPMessageFollowUp::processMessage(IEEE1588Port * port)
+{
+	uint64_t delay;
+	Timestamp sync_arrival;
+	Timestamp system_time(0, 0, 0);
+	Timestamp device_time(0, 0, 0);
 
 	struct masterToLocal master_to_local;
 	struct localToSystem local_to_system;
@@ -956,31 +1051,9 @@ void PTPMessageFollowUp::processMessage(IEEE1588Port * port)
 	if ((delay = port->getLinkDelay()) == 3600000000000) {
 		goto done;
 	}
-#if 0
-	master_local_freq_offset  =  tlv.getRateOffset();
-	master_local_freq_offset /= 2ULL << 41;
-	master_local_freq_offset += 1.0;
-	master_local_freq_offset /= port->getPeerRateOffset();
 
-	correctionField = (uint64_t)
-		((correctionField >> 16)/master_local_freq_offset);
-	correction = (int) (delay + correctionField);
-
-	if( correction > 0 )
-	  TIMESTAMP_ADD_NS( preciseOriginTimestamp, correction );
-	else TIMESTAMP_SUB_NS( preciseOriginTimestamp, -correction );
-	scalar_offset  = TIMESTAMP_TO_NS( sync_arrival );
-	scalar_offset -= TIMESTAMP_TO_NS( preciseOriginTimestamp );
-
-	XPTPD_INFO
-		("Followup Correction Field: %Ld,%lu", correctionField >> 16,
-		 delay);
-	XPTPD_INFO
-		("FollowUp Scalar = %lld", scalar_offset);
-#endif
 	/* Otherwise synchronize clock with approximate time from Sync message */
 	uint32_t local_clock, nominal_clock_rate;
-//	uint32_t device_sync_time_offset;
 
 	port->getDeviceTime(system_time, device_time, local_clock,
 			    nominal_clock_rate);
@@ -988,90 +1061,20 @@ void PTPMessageFollowUp::processMessage(IEEE1588Port * port)
 		( "Device Time = %llu,System Time = %llu\n",
 		  TIMESTAMP_TO_NS(device_time), TIMESTAMP_TO_NS(system_time));
 
-	/* Adjust local_clock to correspond to sync_arrival */
-//	device_sync_time_offset =
-//	    TIMESTAMP_TO_NS(device_time) - TIMESTAMP_TO_NS(sync_arrival);
-
 	XPTPD_INFO
 	    ("ptp_message::FollowUp::processMessage System time: %u,%u "
 		 "Device Time: %u,%u",
 	     system_time.seconds_ls, system_time.nanoseconds,
 	     device_time.seconds_ls, device_time.nanoseconds);
 
-//	local_clock_adjustment =
-//	  port->getClock()->
-//	  calcMasterLocalClockRateDifference
-//	  ( preciseOriginTimestamp, sync_arrival );
-
 	if( port->getPortState() != PTP_MASTER ) {
 		port->incSyncCount();
-		/* Do not call calcLocalSystemClockRateDifference it updates state
-		   global to the clock object and if we are master then the network 
-		   is transitioning to us not being master but the master process
-		   is still running locally */
-//		local_system_freq_offset =
-//			port->getClock()
-//			->calcLocalSystemClockRateDifference
-//			( device_time, system_time );
-//		TIMESTAMP_SUB_NS
-//			( system_time, (uint64_t)
-//			  (((FrequencyRatio) device_sync_time_offset)/
-//			   local_system_freq_offset) );
-//		local_system_offset =
-//			TIMESTAMP_TO_NS(system_time) - TIMESTAMP_TO_NS(sync_arrival);
-
 		master_to_local.preciseOriginTimestamp = preciseOriginTimestamp;
 		master_to_local.sync_arrival = sync_arrival;
 		master_to_local.freq_ratio =  port->getClock()->calcMasterLocalClockRateDifference( preciseOriginTimestamp, sync_arrival );
 		local_to_system.device_time = device_time;
 		local_to_system.system_time = system_time;
 		local_to_system.freq_ratio = port->getClock()->calcLocalSystemClockRateDifference( device_time, system_time );;
-
-lla3 = lla2;
-lla2 = lla1;
-lla1 = TIMESTAMP_TO_NS(master_to_local.preciseOriginTimestamp);
-llb3 = llb2;
-llb2 = llb1;
-llb1 = TIMESTAMP_TO_NS(master_to_local.sync_arrival);
-llc3 = llc2;
-llc2 = llc1;
-llc1 = TIMESTAMP_TO_NS(local_to_system.device_time);
-lld3 = lld2;
-lld2 = lld1;
-lld1 = TIMESTAMP_TO_NS(local_to_system.system_time);
-lda3 = lda2;
-lda2 = lda1;
-lda1 = master_to_local.freq_ratio;
-ldb3 = ldb2;
-ldb2 = ldb1;
-ldb1 = local_to_system.freq_ratio;
-
-if (((lla1-lla2) > UPPER_LIMIT) || (((lla1-lla2) < LOWER_LIMIT) && (((lla1-lla2) > SHORT_CYCLE_UPPER) || ((lla1-lla2) < SHORT_CYCLE_LOWER))))
-{
-	fprintf(stderr, "***** MtoL1: %llu  T1: %llu  Delta: %llu      %llu\n", lla2, lla1, (lla1 - lla2), delay);
-}
-if (((llb1-llb2) > UPPER_LIMIT) || (((llb1-llb2) < LOWER_LIMIT) && (((llb1-llb2) > SHORT_CYCLE_UPPER) || ((llb1-llb2) < SHORT_CYCLE_LOWER))))
-{
-	fprintf(stderr, "***** MtoL2: %llu  T1: %llu  Delta: %llu\n", llb2, llb1, (llb1 - llb2));
-}
-if (((llc1-llc2) > UPPER_LIMIT) || (((llc1-llc2) < LOWER_LIMIT) && (((llc1-llc2) > SHORT_CYCLE_UPPER) || ((llc1-llc2) < SHORT_CYCLE_LOWER))))
-{
-	fprintf(stderr, "***** LtoS1: %llu  T1: %llu  Delta: %llu\n", llc2, llc1, (llc1 - llc2));
-}
-if (((lld1-lld2) > UPPER_LIMIT) || (((lld1-lld2) < LOWER_LIMIT) && (((lld1-lld2) > SHORT_CYCLE_UPPER) || ((lld1-lld2) < SHORT_CYCLE_LOWER))))
-{
-	fprintf(stderr, "***** LtoSL2: %llu  T1: %llu  Delta: %llu\n", lld2, lld1, (lld1 - lld2));
-}
-
-if ((master_to_local.freq_ratio > 1.0001) || (master_to_local.freq_ratio < 0.9999))
-{
-	fprintf(stderr, "***** MtoLFR: %llu\n", master_to_local.freq_ratio * 10000000);
-}
-if ((local_to_system.freq_ratio > 1.0001) || (local_to_system.freq_ratio < 0.9999))
-{
-	fprintf(stderr, "***** LtoSFR: %llu\n", local_to_system.freq_ratio * 10000000);
-}
-
 
 		port->getClock()->setMasterOffset
 			( master_to_local, local_to_system,
@@ -1093,7 +1096,7 @@ done:
 	
 	return;
 }
-
+#endif
 
  PTPMessagePathDelayReq::PTPMessagePathDelayReq(IEEE1588Port * port):
 	 PTPMessageCommon (port)
@@ -1233,7 +1236,6 @@ void PTPMessagePathDelayReq::sendPort(IEEE1588Port * port,
 	messageLength = PTP_COMMON_HDR_LENGTH + PTP_PDELAY_REQ_LENGTH;
 	tspec_msg_t |= messageType & 0xF;
 	buildCommonHeader(buf_ptr);
-
 	port->sendEventPort(buf_t, messageLength, MCAST_PDELAY, destIdentity);
 	return;
 }
@@ -1362,13 +1364,6 @@ PTPMessagePathDelayRespFollowUp::~PTPMessagePathDelayRespFollowUp()
 {
 	delete requestingPortIdentity;
 }
-
-int64_t ld1, ld2, ld3;
-long long ta1, ta2, ta3;
-uint16_t si1, si2, si3;
-uint16_t showOnce = 0;
-uint32_t rxsec3, rxsec2, rxsec1, rxn3, rxn2, rxn1;
-uint32_t txsec3, txsec2, txsec1, txn3, txn2, txn1;
 
 
 void PTPMessagePathDelayRespFollowUp::processMessage(IEEE1588Port * port)
@@ -1499,35 +1494,6 @@ void PTPMessagePathDelayRespFollowUp::processMessage(IEEE1588Port * port)
 	turn_around +=
 		(remote_resp_tx_timestamp.nanoseconds * 1LL -
 		 remote_req_rx_timestamp.nanoseconds);
-ld3 = ld2;
-ld2 = ld1;
-ld1 = link_delay;
-ta3 = ta2;
-ta2 = ta1;
-ta1 = turn_around;
-si3 = si2;
-si2 = si1;
-si1 = resp->getSequenceId();
-rxsec3 = rxsec2;
-rxsec2 = rxsec1;
-rxsec1 = response_rx_timestamp.seconds_ls;
-rxn3 = rxn2;
-rxn2 = rxn1;
-rxn1 = response_rx_timestamp.nanoseconds;
-txsec3 = txsec2;
-txsec2 = txsec1;
-txsec1 = request_tx_timestamp.seconds_ls;
-txn3 = txn2;
-txn2 = txn1;
-txn1 = request_tx_timestamp.nanoseconds;
-if ((link_delay - turn_around > 2000)  || (100 == showOnce))
-{
-RtPrintf("S ID: %u %u %u  L: %llu %llu %llu  T: %llu %llu %llu ****************\n", si3, si2, si1, ld3, ld2, ld1, ta3, ta2, ta1);
-RtPrintf("Rx: %llu.%llu   %llu.%llu   %llu.%llu\n", rxsec3, rxn3, rxsec2, rxn2, rxsec1, rxn1);
-RtPrintf("Tx: %llu.%llu   %llu.%llu   %llu.%llu\n", txsec3, txn3, txsec2, txn2, txsec1, txn1);
-}
-if (110 > showOnce) showOnce++;
-
 
 	// Adjust turn-around time for peer to local clock rate difference
 	if 

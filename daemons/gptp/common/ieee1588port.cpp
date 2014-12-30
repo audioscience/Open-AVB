@@ -727,16 +727,141 @@ void IEEE1588Port::processEvent(Event e)
 			}
 			break;
 	case SYNC_INTERVAL_TIMEOUT_EXPIRES:
+
 			XPTPD_INFO("SYNC_INTERVAL_TIMEOUT_EXPIRES occured");
 fprintf(stderr, "STO\n");
 			{
+#ifdef OLD_GPTP
+				/* Set offset from master to zero, update device vs
+				   system time offset */
+				Timestamp system_time;
+				Timestamp device_time;
+				FrequencyRatio local_system_freq_offset;
+				int64_t local_system_offset;
+				long long wait_time = 0;
+				
+				uint32_t local_clock, nominal_clock_rate;
+
+				// Send a sync message and then a followup to broadcast
+				if (asCapable) {
+					PTPMessageSync *sync = new PTPMessageSync(this);
+					PortIdentity dest_id;
+					getPortIdentity(dest_id);
+					sync->setPortIdentity(&dest_id);
+					getTxLock();
+					sync->sendPort(this, NULL);
+					XPTPD_INFO("Sent SYNC message");
+					
+					int ts_good;
+					Timestamp sync_timestamp;
+					unsigned sync_timestamp_counter_value;
+					int iter = TX_TIMEOUT_ITER;
+					long req = TX_TIMEOUT_BASE;
+					ts_good =
+						getTxTimestamp(sync, sync_timestamp,
+									   sync_timestamp_counter_value,
+									   false);
+					while (ts_good != 0 && iter-- != 0) {
+						timer->sleep(req);
+						wait_time += req;
+
+						if (ts_good != -72 && iter < 1)
+							XPTPD_ERROR(
+								"Error (TX) timestamping Sync (Retrying), "
+								"error=%d", ts_good);
+						ts_good =
+							getTxTimestamp
+							(sync, sync_timestamp, 
+							 sync_timestamp_counter_value, iter == 0);
+						req *= 2;
+					}
+					putTxLock();
+					
+					if (ts_good != 0) {
+						char msg
+							[HWTIMESTAMPER_EXTENDED_MESSAGE_SIZE];
+						getExtendedError(msg);
+						fprintf
+							(stderr,
+							 "Error (TX) timestamping Sync, error="
+							 "%d\n%s",
+							 ts_good, msg );
+ 					}
+
+					if (ts_good == 0) {
+						XPTPD_INFO("Successful Sync timestamp");
+						XPTPD_INFO("Seconds: %u",
+								   sync_timestamp.seconds_ls);
+						XPTPD_INFO("Nanoseconds: %u",
+								   sync_timestamp.nanoseconds);
+					} else {
+						XPTPD_INFO
+							("*** Unsuccessful Sync timestamp");
+					}
+					
+					PTPMessageFollowUp *follow_up;
+					if (ts_good == 0) {
+						follow_up =
+							new PTPMessageFollowUp(this);
+						PortIdentity dest_id;
+						getPortIdentity(dest_id);
+						follow_up->setPortIdentity(&dest_id);
+						follow_up->setSequenceId(sync->getSequenceId());
+						follow_up->setPreciseOriginTimestamp(sync_timestamp);
+						follow_up->sendPort(this, NULL);
+						delete follow_up;
+					} else {
+					}
+					delete sync;
+				}
+				/* Do getDeviceTime() after transmitting sync frame
+				   causing an update to local/system timestamp */
+				getDeviceTime
+					(system_time, device_time, local_clock, nominal_clock_rate);
+				
+				XPTPD_INFO
+					("port::processEvent(): System time: %u,%u Device Time: %u,%u",
+					 system_time.seconds_ls, system_time.nanoseconds,
+					 device_time.seconds_ls, device_time.nanoseconds);
+				
+				local_system_offset =
+			    TIMESTAMP_TO_NS(system_time) -
+			    TIMESTAMP_TO_NS(device_time);
+			  local_system_freq_offset =
+			    clock->calcLocalSystemClockRateDifference
+			    ( device_time, system_time );
+			  clock->setMasterOffset
+				  (0, device_time, 1.0, local_system_offset,
+				   system_time, local_system_freq_offset, sync_count,
+				   pdelay_count, port_state );
+
+			  /* If accelerated_sync is non-zero then start 16 ms sync
+				 timer, subtract 1, for last one start PDelay also */
+			  if( _accelerated_sync_count > 0 ) {
+				  clock->addEventTimer
+					  ( this, SYNC_INTERVAL_TIMEOUT_EXPIRES, 8000000 );
+				  --_accelerated_sync_count;
+			  } else {
+				  syncDone();
+				  if( _accelerated_sync_count == 0 ) {
+					  --_accelerated_sync_count;
+				  }
+				  wait_time *= 1000; // to ns
+				  wait_time =
+					  ((long long)
+					   (pow((double)2,getSyncInterval())*1000000000.0)) -
+					  wait_time;
+				  wait_time = wait_time > EVENT_TIMER_GRANULARITY ? wait_time :
+					  EVENT_TIMER_GRANULARITY;
+				  clock->addEventTimer
+					  ( this, SYNC_INTERVAL_TIMEOUT_EXPIRES, wait_time );
+			  }
+#else
 				/* Set offset from master to zero, update device vs
 				   system time offset */
 				Timestamp system_time;
 				Timestamp device_time;
 				Timestamp sync_timestamp;
-//				FrequencyRatio local_system_freq_offset;
-//				int64_t local_system_offset;
 				long long wait_time = 0;
 				
 				uint32_t local_clock, nominal_clock_rate;
@@ -823,12 +948,6 @@ fprintf(stderr, "STO\n");
 					("port::processEvent(): System time: %u,%u Device Time: %u,%u",
 					 system_time.seconds_ls, system_time.nanoseconds,
 					 device_time.seconds_ls, device_time.nanoseconds);
-				
-//				local_system_offset = TIMESTAMP_TO_NS(system_time) -
-//									    TIMESTAMP_TO_NS(device_time);
-//			  local_system_freq_offset =
-//			    clock->calcLocalSystemClockRateDifference
-//			    ( device_time, system_time );
 
 				master_to_local.preciseOriginTimestamp = sync_timestamp;
 				master_to_local.sync_arrival = sync_timestamp;
@@ -837,32 +956,30 @@ fprintf(stderr, "STO\n");
 				local_to_system.system_time = system_time;
 				local_to_system.freq_ratio = clock->calcLocalSystemClockRateDifference( device_time, system_time );;
 
-			  clock->setMasterOffset
-				  (master_to_local, local_to_system, sync_count,
-				   pdelay_count, port_state );
+				clock->setMasterOffset(master_to_local, local_to_system, sync_count,
+										 pdelay_count, port_state );
 
-			  /* If accelerated_sync is non-zero then start 16 ms sync
-				 timer, subtract 1, for last one start PDelay also */
-			  if( _accelerated_sync_count > 0 ) {
-				  clock->addEventTimer
-					  ( this, SYNC_INTERVAL_TIMEOUT_EXPIRES, 8000000 );
-				  --_accelerated_sync_count;
-			  } else {
-				  syncDone();
-				  if( _accelerated_sync_count == 0 ) {
-					  --_accelerated_sync_count;
-				  }
-				  wait_time *= 1000; // to ns
-				  wait_time =
-					  ((long long)
-					   (pow((double)2,getSyncInterval())*1000000000.0)) -
-					  wait_time;
-				  wait_time = wait_time > EVENT_TIMER_GRANULARITY ? wait_time :
-					  EVENT_TIMER_GRANULARITY;
-				  clock->addEventTimer
-					  ( this, SYNC_INTERVAL_TIMEOUT_EXPIRES, wait_time );
-			  }
-			  
+				/* If accelerated_sync is non-zero then start 16 ms sync
+				   timer, subtract 1, for last one start PDelay also */
+				if( _accelerated_sync_count > 0 ) {
+					clock->addEventTimer( this, SYNC_INTERVAL_TIMEOUT_EXPIRES, 8000000 );
+					--_accelerated_sync_count;
+				} else {
+					syncDone();
+					if( _accelerated_sync_count == 0 ) {
+						--_accelerated_sync_count;
+					}
+					wait_time *= 1000; // to ns
+					wait_time =
+							((long long)
+							(pow((double)2,getSyncInterval())*1000000000.0)) -
+							wait_time;
+					wait_time = wait_time > EVENT_TIMER_GRANULARITY ? wait_time :
+								EVENT_TIMER_GRANULARITY;
+					clock->addEventTimer
+							( this, SYNC_INTERVAL_TIMEOUT_EXPIRES, wait_time );
+				}
+#endif
 			}
 			break;
 	case ANNOUNCE_INTERVAL_TIMEOUT_EXPIRES:

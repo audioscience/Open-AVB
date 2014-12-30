@@ -310,6 +310,7 @@ FrequencyRatio IEEE1588Clock::calcMasterLocalClockRateDifference( Timestamp mast
 	return ppt_offset;
 }
 
+
 void IEEE1588Clock::setSharedAsCapable(bool asCapable)
 {
 	if ( ipc != NULL ) 
@@ -330,14 +331,68 @@ bool IEEE1588Clock::checkPriority1Update(uint32_t *newPriority)
 	return needUpdate;
 }
 
+#ifdef OLD_GPTP
+
+void IEEE1588Clock::setMasterOffset
+( int64_t master_local_offset, Timestamp local_time,
+  FrequencyRatio master_local_freq_offset, int64_t local_system_offset,
+  Timestamp system_time, FrequencyRatio local_system_freq_offset,
+  unsigned sync_count, unsigned pdelay_count, PortState port_state )
+{
+	_master_local_freq_offset = master_local_freq_offset;
+	_local_system_freq_offset = local_system_freq_offset;
+
+	if( ipc != NULL ) ipc->update
+		( master_local_offset, local_system_offset, master_local_freq_offset,
+		  local_system_freq_offset, TIMESTAMP_TO_NS(local_time), sync_count,
+		  pdelay_count, port_state );
+
+	if( master_local_offset == 0 && master_local_freq_offset == 1.0 ) {
+		return;
+	}
+
+	if( _syntonize ) {
+		if( _new_syntonization_set_point ) {
+			_new_syntonization_set_point = false;
+			if( _timestamper ) {
+				/* Make sure that there are no transmit operations
+				   in progress */
+				getTxLockAll();
+				_timestamper->HWTimestamper_adjclockphase
+					( -master_local_offset );
+				_master_local_freq_offset_init = false;
+				putTxLockAll();
+				master_local_offset = 0;
+			}
+		}
+		// Adjust for frequency offset
+		long double phase_error = (long double) -master_local_offset;
+		_ppm += (float) (INTEGRAL*phase_error +
+			 PROPORTIONAL*((master_local_freq_offset-1.0)*1000000));
+		if( _ppm < LOWER_FREQ_LIMIT ) _ppm = LOWER_FREQ_LIMIT;
+		if( _ppm > UPPER_FREQ_LIMIT ) _ppm = UPPER_FREQ_LIMIT;
+		if( _timestamper ) {
+			if( !_timestamper->HWTimestamper_adjclockrate( _ppm )) {
+				XPTPD_ERROR( "Failed to adjust clock rate" );
+			}
+		}
+	}
+	
+	return;
+}
+
+#else
+
 void IEEE1588Clock::setMasterOffset
 ( struct masterToLocal master_to_local, struct localToSystem local_to_system,
   unsigned sync_count, unsigned pdelay_count, PortState port_state )
 {
-	if( ipc != NULL ) ipc->update
-		( master_to_local, local_to_system, sync_count,
-		  pdelay_count, port_state );
-
+	if( ipc != NULL )
+	{
+		ipc->update(master_to_local, local_to_system, sync_count,
+					pdelay_count, port_state );
+		ipc->setSharedGrandmasterClockId(grandmaster_clock_identity);
+	}
 	if( master_to_local.freq_ratio == 1.0 ) {
 		return;
 	}
@@ -371,6 +426,7 @@ void IEEE1588Clock::setMasterOffset
 	
 	return;
 }
+#endif
 
 /* Get current time from system clock */
 Timestamp IEEE1588Clock::getTime(void)
