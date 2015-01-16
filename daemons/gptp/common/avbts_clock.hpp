@@ -250,7 +250,9 @@ public:
 	( int64_t master_local_offset, Timestamp local_time,
 		FrequencyRatio master_local_freq_offset, int64_t local_system_offset,
 		Timestamp system_time, FrequencyRatio local_system_freq_offset,
-		unsigned sync_count, unsigned pdelay_count, PortState port_state );
+		unsigned sync_count, unsigned pdelay_count, PortState port_state , long long pTime,
+		Timestamp raw_system_time, Timestamp raw_device_time,
+		long long qp_prior_time,  long long qp_after_time );
 #else
 
 	void setMasterOffset
