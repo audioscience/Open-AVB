@@ -252,7 +252,7 @@ public:
 		Timestamp system_time, FrequencyRatio local_system_freq_offset,
 		unsigned sync_count, unsigned pdelay_count, PortState port_state , long long pTime,
 		Timestamp raw_system_time, Timestamp raw_device_time,
-		long long qp_prior_time,  long long qp_after_time );
+		long long qp_prior_time,  long long qp_after_time, long long ll_retry_count );
 #else
 
 	void setMasterOffset

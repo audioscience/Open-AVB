@@ -339,7 +339,7 @@ void IEEE1588Clock::setMasterOffset
   Timestamp system_time, FrequencyRatio local_system_freq_offset,
   unsigned sync_count, unsigned pdelay_count, PortState port_state , long long pTime,
   Timestamp raw_system_time, Timestamp raw_device_time,
-  long long ll_raw_prior_time,  long long ll_raw_after_time )
+  long long ll_raw_prior_time,  long long ll_raw_after_time, long long ll_retry_count )
 {
 	_master_local_freq_offset = master_local_freq_offset;
 	_local_system_freq_offset = local_system_freq_offset;
@@ -351,7 +351,7 @@ void IEEE1588Clock::setMasterOffset
 		  local_system_freq_offset, TIMESTAMP_TO_NS(local_time), sync_count,
 		  pdelay_count, port_state , pTime,
 		  raw_system_time, raw_device_time,
-		  ll_raw_prior_time,  ll_raw_after_time);
+		  ll_raw_prior_time,  ll_raw_after_time, ll_retry_count );
 
 		ipc->setSharedGrandmasterClockId(grandmaster_clock_identity);
 	}
