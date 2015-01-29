@@ -46,6 +46,191 @@
 #define REALLY_UGLY_USE_OF_GLOBAL 1
 
 
+uint64_t u_old_POT1 = 0;
+uint64_t u_old_POT2 = 0;
+
+Timestamp old_qTS1(0,0,0);
+Timestamp old_qTS2(0,0,0);
+
+
+uint64_t u_old_qTS1 = 0;
+uint64_t u_old_qTS2 = 0;
+
+static int startcnt=0;
+static int goodcnt=0;
+static uint64_t u_cycles = 0;
+
+
+/**
+\brief This function uses historic timestamp information to determine if
+	the questionableTimestamp is correct. If found to be in error a new timestamp
+	is generated to be a best approximation of what the bad timestamp should have been.
+
+  \param questionableTimestamp [in,out] - reference to questionable Timestamp
+  \param preciseOriginTimestamp [in]     - preciseOriginTimestamp
+  \return either unmodified Timestamp or calculated Timestamp.
+**/
+
+Timestamp AdjustBadTimestamp( Timestamp questionableTimestamp, Timestamp preciseOriginTimestamp )
+{
+	uint64_t   u_diff_last_questionable;
+	uint64_t   u_diff_this_questionable;
+	uint64_t   u_diff_last_precision;
+	uint64_t   u_diff_this_precision;
+	double   d_estimated;
+	double   d_error_est;
+	double   d_ratio;
+	double   d_this_ratio;
+	double   d_threshold = 1.0001;
+	uint64_t u_questionableTimestamp  = TIMESTAMP_TO_NS(questionableTimestamp);
+	uint64_t u_preciseOriginTimestamp = TIMESTAMP_TO_NS(preciseOriginTimestamp);
+
+
+	Timestamp tmp_questionableTimestamp = questionableTimestamp;
+
+	bool     b_shift_in = true;
+
+	u_cycles++;
+
+	uint64_t raw_delta = (u_questionableTimestamp - u_old_qTS2);
+
+
+	int      iNumDeltasToAdd = 0;
+	
+	if( 0 == startcnt )      //if( 0 == TIMESTAMP_TO_NS( old_POT1 ) )
+	{
+		startcnt++;
+	}
+	else if( 1 == startcnt ) //( 0 == TIMESTAMP_TO_NS( old_POT2 ) )
+	{
+		startcnt++;
+	}
+
+	else if( ((raw_delta > 62300000) && (raw_delta < 66500000)) ||
+		     ((raw_delta > 123000000) && (raw_delta < 129000000)) )
+	{
+		if( 5 > goodcnt )
+		{
+			fprintf( stderr, "GOOD cyc=%6u : is=%16llu rd=%11u\n",
+				u_cycles,
+				u_questionableTimestamp, 
+				raw_delta );
+
+			goodcnt++;
+		}
+	}
+
+	else if( 5 > startcnt )
+	{  
+        //                                     -1                          -2
+		u_diff_last_questionable = ( u_old_qTS2               - u_old_qTS1 );
+
+		//                                     this                        -1
+		u_diff_this_questionable    = ( u_questionableTimestamp - u_old_qTS2 );
+
+//	local_delta =  sorted_data[i][iLocalTime] - previous_data[iLocalTime]
+
+		u_diff_last_precision         = ( u_old_POT2 - u_old_POT1 );
+		
+		u_diff_this_precision = ( u_preciseOriginTimestamp - u_old_POT2 );
+		
+//	origin_delta = sorted_data[i][iOriginTime] - previous_data[iOriginTime]
+		
+		d_ratio = (double)((double)u_diff_last_precision / (double)u_diff_last_questionable);
+		
+		d_this_ratio = (double)((double)u_diff_this_precision / (double)u_diff_this_questionable);
+
+		
+//	ratio = float(local_delta) / float(origin_delta)
+		
+		d_estimated = (double)(u_old_qTS2 + (u_diff_this_precision * (1.00/d_ratio) ));
+		
+//	estimated_local_time = float(previous_data[iLocalTime]) + float(origin_delta) * ratio
+		
+		d_error_est = (d_estimated - (double)u_questionableTimestamp);
+		
+//	estimate_error = estimated_local_time - float(sorted_data[i][iLocalTime])
+
+		
+		
+//	if abs(ratio - 1.0) > ratio_threshold:
+
+		if( abs( d_this_ratio - 1.0 ) > d_threshold )
+		{
+			tmp_questionableTimestamp.set64( (uint64_t)d_estimated );
+
+			if( 0 == (u_cycles % 10) )
+			{
+				fprintf( stderr, "ERROR cyc=%6u  was=%16llu rpl=%16llu  dlq=%16llu dlp=%16llu dr=%16llu rd=%11llu\n", 
+					u_cycles,
+					u_questionableTimestamp, 
+					TIMESTAMP_TO_NS(tmp_questionableTimestamp), 
+					(uint64_t)u_diff_last_questionable,
+					(uint64_t)u_diff_last_precision,
+					(uint64_t)(d_ratio * 1000000),
+					raw_delta );
+			}
+
+			b_shift_in = false;
+		}
+#if 0
+		else
+		{
+//			tmp_questionableTimestamp.set64( (uint64_t)d_estimated );
+//			if( 0 == (u_cycles % 10) )
+			{
+			fprintf( stderr, "No ERROR cyc=%6u rd=%10llu est=%16llu nts=%16llu dR=%lf ree=%lf\n", 
+				u_cycles,
+				raw_delta, 
+				(uint64_t)d_estimated,
+				TIMESTAMP_TO_NS(tmp_questionableTimestamp),
+				d_ratio,
+				d_error_est );
+
+//			fprintf( stderr, "--- q1=%16llu q2=%16llu q=%16llu # p1=%16llu p2=%16llu p=%16llu\n",
+//				u_old_qTS1, u_old_qTS2, u_questionableTimestamp,
+//				u_old_POT1, u_old_POT2, u_preciseOriginTimestamp );
+			}
+		}
+#endif
+	}
+
+	if(true == b_shift_in )
+	{
+		// only update storage when BOTH are considered valid.
+			
+		u_old_POT1 = u_old_POT2;
+		u_old_POT2 = u_preciseOriginTimestamp;
+			
+		u_old_qTS1 = u_old_qTS2;
+		u_old_qTS2 = u_questionableTimestamp;
+
+		old_qTS1 = old_qTS2;
+		old_qTS2 = questionableTimestamp;
+
+		if( 2 == startcnt )
+		{
+			uint64_t tdelta = (u_old_qTS2 - u_old_qTS1);
+
+			if( (tdelta < 124000000) || (tdelta > 128000000) )
+			{
+				// we won't start checking until we have a valid 125mS starting point
+				startcnt = 0;
+				fprintf( stderr, "No ERROR cyc=%6u restart delta=%11u\n", tdelta );
+			}
+			else
+			{
+				startcnt++;
+			}
+		}
+	}
+
+	return tmp_questionableTimestamp;
+}
+
+
+
+
 PTPMessageCommon::PTPMessageCommon(IEEE1588Port * port)
 {
 	// Fill in fields using port/clock dataset as a template
@@ -868,6 +1053,7 @@ void PTPMessageFollowUp::sendPort(IEEE1588Port * port,
 
 long long g_ll_raw_Prior;
 long long g_ll_raw_After;
+long long g_ll_retry_count;
 
 #endif
 
@@ -922,6 +1108,8 @@ long long pTime;
 	}
 
 	sync_arrival = sync->getTimestamp();
+
+	sync_arrival = AdjustBadTimestamp( sync_arrival, preciseOriginTimestamp ); // trb 20150128
 
 	delay = port->getLinkDelay();
 	if ((delay = port->getLinkDelay()) == 3600000000000) {
@@ -1001,7 +1189,7 @@ raw_device_time = device_time;
 			  local_system_offset, system_time, local_system_freq_offset,
 			  port->getSyncCount(), port->getPdelayCount(),
 			  port->getPortState() , pTime, raw_system_time, raw_device_time,
-              g_ll_raw_Prior,  g_ll_raw_After	);
+              g_ll_raw_Prior,  g_ll_raw_After, g_ll_retry_count	);
 
 
 		port->syncDone();
