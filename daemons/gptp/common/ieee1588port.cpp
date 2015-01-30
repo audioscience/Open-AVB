@@ -47,6 +47,11 @@
 
 #include <stdlib.h>
 
+// defined in ptp_message.cpp - trb 20150130
+
+//extern PTPMessageSync     dbg_HoldLastSync;
+extern PTPMessageFollowUp    *p_dbg_HoldLastFollowup;
+
 LinkLayerAddress IEEE1588Port::other_multicast(OTHER_MULTICAST);
 LinkLayerAddress IEEE1588Port::pdelay_multicast(PDELAY_MULTICAST);
 
@@ -580,9 +585,9 @@ void IEEE1588Port::processEvent(Event e)
 			    || port_state == PTP_PRE_MASTER) {
 				fprintf
 					(stderr,
-					 "*** %s Timeout Expired - Becoming Master\n", 
+					 "*** %s Timeout Expired - Becoming Master LastFollowUpPOT=%16llu\n", 
 					 e == ANNOUNCE_RECEIPT_TIMEOUT_EXPIRES ? "Announce" :
-					 "Sync" );
+					 "Sync", p_dbg_HoldLastFollowup->getPreciseOriginTimestamp() );
 				{
 				  // We're Grandmaster, set grandmaster info to me
 				  ClockIdentity clock_identity;

@@ -45,6 +45,13 @@
 
 #define REALLY_UGLY_USE_OF_GLOBAL 1
 
+// holds a copy of each SYNC message we respond to.
+//PTPMessageSync *p_dbg_HoldLastSync = NULL;
+
+
+// holds a copy of each SYNC_Folloup message we create.
+PTPMessageFollowUp *p_dbg_HoldLastFollowup = NULL;
+
 
 uint64_t u_old_POT1 = 0;
 uint64_t u_old_POT2 = 0;
@@ -371,6 +378,8 @@ PTPMessageCommon *buildPTPMessage
 			       buf + PTP_SYNC_NSEC(PTP_SYNC_OFFSET),
 			       sizeof(sync_msg->originTimestamp.nanoseconds));
 			msg = sync_msg;
+
+//			dbg_HoldLastSync = sync_msg; // trb 20150130
 		}
 		break;
 	case FOLLOWUP_MESSAGE:
@@ -417,6 +426,16 @@ PTPMessageCommon *buildPTPMessage
 			memcpy( &(followup_msg->tlv), buf+PTP_FOLLOWUP_LENGTH, sizeof(followup_msg->tlv) );
 
 			msg = followup_msg;
+			
+			if( NULL == p_dbg_HoldLastFollowup )
+			{
+				p_dbg_HoldLastFollowup = new PTPMessageFollowUp(port);
+			}
+
+			if( NULL != p_dbg_HoldLastFollowup )
+			{
+				p_dbg_HoldLastFollowup = followup_msg; // trb 20150130
+			}
 		}
 		break;
 	case PATH_DELAY_REQ_MESSAGE:
