@@ -120,7 +120,7 @@ Timestamp AdjustBadTimestamp( Timestamp questionableTimestamp, Timestamp precise
 	{
 		if( 5 > goodcnt )
 		{
-			fprintf( stderr, "GOOD cyc=%6u : is=%16llu rd=%11u\n",
+			fprintf( stderr, "GOOD cyc=%6u : is=%16llu rd=%llu\n",
 				u_cycles,
 				u_questionableTimestamp, 
 				raw_delta );
@@ -232,7 +232,7 @@ Timestamp AdjustBadTimestamp( Timestamp questionableTimestamp, Timestamp precise
 				u_cycles     = 0;
 				goodcnt      = 0;
 				bad_in_a_row = 0;
-				fprintf( stderr, "No ERROR cyc=%6u restart delta=%11u\n", tdelta );
+				fprintf( stderr, "No ERROR cyc=%6u restart delta=%llu\n", tdelta );
 			}
 			else
 			{
