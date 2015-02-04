@@ -583,11 +583,15 @@ void IEEE1588Port::processEvent(Event e)
 			    || port_state == PTP_UNCALIBRATED
 			    || port_state == PTP_SLAVE
 			    || port_state == PTP_PRE_MASTER) {
+					Timestamp tsTmp(0,0,0);
+					if(NULL!=p_dbg_HoldLastFollowup) {
+						tsTmp = p_dbg_HoldLastFollowup->getPreciseOriginTimestamp();
+					}
 				fprintf
 					(stderr,
 					 "*** %s Timeout Expired - Becoming Master LastFollowUpPOT=%16llu\n", 
 					 e == ANNOUNCE_RECEIPT_TIMEOUT_EXPIRES ? "Announce" :
-					 "Sync", p_dbg_HoldLastFollowup->getPreciseOriginTimestamp() );
+					 "Sync",  tsTmp );
 				{
 				  // We're Grandmaster, set grandmaster info to me
 				  ClockIdentity clock_identity;

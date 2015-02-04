@@ -67,6 +67,8 @@ static int startcnt=0;
 static int goodcnt=0;
 static uint64_t u_cycles = 0;
 
+static int  bad_in_a_row = 0;
+
 
 /**
 \brief This function uses historic timestamp information to determine if
@@ -165,11 +167,13 @@ Timestamp AdjustBadTimestamp( Timestamp questionableTimestamp, Timestamp precise
 		if( abs( d_this_ratio - 1.0 ) > d_threshold )
 		{
 			tmp_questionableTimestamp.set64( (uint64_t)d_estimated );
+			bad_in_a_row++;
 
 			if( 0 == (u_cycles % 10) )
 			{
-				fprintf( stderr, "ERROR cyc=%6u  was=%16llu rpl=%16llu  dlq=%16llu dlp=%16llu dr=%16llu rd=%11llu\n", 
+				fprintf( stderr, "ERROR cyc=%6u [%d] was=%16llu rpl=%16llu  dlq=%16llu dlp=%16llu dr=%16llu rd=%11llu\n", 
 					u_cycles,
+					bad_in_a_row,
 					u_questionableTimestamp, 
 					TIMESTAMP_TO_NS(tmp_questionableTimestamp), 
 					(uint64_t)u_diff_last_questionable,
@@ -215,6 +219,8 @@ Timestamp AdjustBadTimestamp( Timestamp questionableTimestamp, Timestamp precise
 		old_qTS1 = old_qTS2;
 		old_qTS2 = questionableTimestamp;
 
+		bad_in_a_row = 0;
+
 		if( 2 == startcnt )
 		{
 			uint64_t tdelta = (u_old_qTS2 - u_old_qTS1);
@@ -222,7 +228,10 @@ Timestamp AdjustBadTimestamp( Timestamp questionableTimestamp, Timestamp precise
 			if( (tdelta < 124000000) || (tdelta > 128000000) )
 			{
 				// we won't start checking until we have a valid 125mS starting point
-				startcnt = 0;
+				startcnt     = 0;
+				u_cycles     = 0;
+				goodcnt      = 0;
+				bad_in_a_row = 0;
 				fprintf( stderr, "No ERROR cyc=%6u restart delta=%11u\n", tdelta );
 			}
 			else
@@ -230,6 +239,13 @@ Timestamp AdjustBadTimestamp( Timestamp questionableTimestamp, Timestamp precise
 				startcnt++;
 			}
 		}
+	}
+
+	if( bad_in_a_row > 4 )
+	{
+		bad_in_a_row = 0;
+		startcnt     = 0;
+		goodcnt      = 0;
 	}
 
 	return tmp_questionableTimestamp;
@@ -1103,13 +1119,16 @@ long long pTime;
 
 	if (port->getPortState() == PTP_DISABLED ) {
 		// Do nothing Sync messages should be ignored when in this state
+//fprintf( stderr, "PMFU::PM state=%d\n", port->getPortState() );
 		return;
 	}
 	if (port->getPortState() == PTP_FAULTY) {
 		// According to spec recovery is implementation specific
+//fprintf( stderr, "PMFU::PM state=%d\n", port->getPortState() );
 		port->recoverPort();
 		return;
 	}
+
 
 	PortIdentity sync_id;
 	PTPMessageSync *sync = port->getLastSync();
@@ -1761,10 +1780,10 @@ void PTPMessagePathDelayRespFollowUp::processMessage(IEEE1588Port * port)
 	port->setPeerOffset( request_tx_timestamp, remote_req_rx_timestamp );
 
  abort:
-	delete req;
 	port->setLastPDelayReq(NULL);
-	delete resp;
+	delete req;
 	port->setLastPDelayResp(NULL);
+	delete resp;
 
 	_gc = true;
 
