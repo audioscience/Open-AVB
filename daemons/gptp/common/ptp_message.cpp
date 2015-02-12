@@ -331,7 +331,7 @@ PTPMessageCommon *buildPTPMessage
 
 	if (!(messageType >> 3)) {
 		int iter = 5;
-		long req = 4000;	// = 1 ms
+		long req = TX_TIMEOUT_BASE;    // was 4000; (trb 20150211)	// = 1 ms
 		int ts_good =
 		    port->getRxTimestamp
 			(sourcePortIdentity, sequenceId, timestamp, counter_value, false);
