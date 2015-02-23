@@ -1133,7 +1133,7 @@ long long pTime;
 	PortIdentity sync_id;
 	PTPMessageSync *sync = port->getLastSync();
 	if (sync == NULL) {
-		XPTPD_ERROR("Received Follow Up but there is no sync message");
+		XPTPD_ERROR("Received Follow Up but there is no sync message, Id=[%d]", sequenceId );
 		return;
 	}
 	sync->getPortIdentity(&sync_id);
@@ -1141,7 +1141,7 @@ long long pTime;
 	if (sync->getSequenceId() != sequenceId || sync_id != *sourcePortIdentity)
 	{
 		XPTPD_ERROR
-		    ("Received Follow Up but cannot find corresponding Sync");
+		    ("Received Follow Up but cannot find corresponding Sync, Id=[%d]", sequenceId);
 		goto done;
 	}
 
@@ -1370,12 +1370,14 @@ void PTPMessagePathDelayReq::processMessage(IEEE1588Port * port)
 
 	if (port->getPortState() == PTP_DISABLED) {
 		// Do nothing all messages should be ignored when in this state
+XPTPD_ERROR("PTPMessagePathDelayReq: PTP_DISABLED\n" );
 		goto done;
 	}
 
 	if (port->getPortState() == PTP_FAULTY) {
 		// According to spec recovery is implementation specific
 		port->recoverPort();
+XPTPD_ERROR("PTPMessagePathDelayReq: PTP_FAULTY\n" );
 		goto done;
 	}
 
@@ -1399,6 +1401,7 @@ void PTPMessagePathDelayReq::processMessage(IEEE1588Port * port)
 	resp->setRequestReceiptTimestamp(_timestamp);
 	if( port->getTimestampVersion() != _timestamp._version ) {
 		delete resp;
+XPTPD_ERROR("PTPMessagePathDelayReq: \"port->getTimestampVersion() != _timestamp._version\"\n" );
 		goto done;
 	}
 	port->getTxLock();
