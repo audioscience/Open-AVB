@@ -738,7 +738,7 @@ void IEEE1588Port::processEvent(Event e)
 	case SYNC_INTERVAL_TIMEOUT_EXPIRES:
 
 			XPTPD_INFO("SYNC_INTERVAL_TIMEOUT_EXPIRES occured");
-fprintf(stderr, "STO\n");
+//fprintf(stderr, "STO\n");
 			{
 #ifdef OLD_GPTP
 				/* Set offset from master to zero, update device vs
