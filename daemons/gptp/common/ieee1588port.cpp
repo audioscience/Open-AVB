@@ -431,6 +431,7 @@ void IEEE1588Port::processEvent(Event e)
 			}
       
 			port_ready_condition->wait_prelock();
+fprintf( stderr,"listening_thread " );
 			listening_thread = thread_factory->createThread();
 			if (!listening_thread->
 				start (openPortWrapper, (void *)this))
@@ -589,9 +590,9 @@ void IEEE1588Port::processEvent(Event e)
 					}
 				fprintf
 					(stderr,
-					 "*** %s Timeout Expired - Becoming Master LastFollowUpPOT=%16llu\n", 
+					 "*** %s Timeout Expired - Becoming Master LastFollowUpPOT=%16llu  LastSyncId=%u\n", 
 					 e == ANNOUNCE_RECEIPT_TIMEOUT_EXPIRES ? "Announce" :
-					 "Sync",  tsTmp );
+					 "Sync",  tsTmp, p_dbg_HoldLastFollowup->getSequenceId() );
 				{
 				  // We're Grandmaster, set grandmaster info to me
 				  ClockIdentity clock_identity;

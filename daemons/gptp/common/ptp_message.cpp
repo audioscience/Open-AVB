@@ -450,7 +450,7 @@ PTPMessageCommon *buildPTPMessage
 
 			if( NULL != p_dbg_HoldLastFollowup )
 			{
-				p_dbg_HoldLastFollowup = followup_msg; // trb 20150130
+				*p_dbg_HoldLastFollowup = *followup_msg; // trb 20150130
 			}
 		}
 		break;
