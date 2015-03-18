@@ -46,6 +46,7 @@
 #include <math.h>
 
 #include <stdlib.h>
+#include <Windows.h>
 
 // defined in ptp_message.cpp - trb 20150130
 
@@ -311,6 +312,8 @@ void *IEEE1588Port::openPort(void)
 {
 	port_ready_condition->signal();
 
+fprintf( stderr, "*ID* gPTP %s PID %d  TID %d\n\n", __FUNCTION__, GetCurrentProcessId (), GetCurrentThreadId () );
+
 	while (1) {
 		PTPMessageCommon *msg;
 		uint8_t buf[128];
@@ -431,7 +434,7 @@ void IEEE1588Port::processEvent(Event e)
 			}
       
 			port_ready_condition->wait_prelock();
-fprintf( stderr,"listening_thread " );
+
 			listening_thread = thread_factory->createThread();
 			if (!listening_thread->
 				start (openPortWrapper, (void *)this))
