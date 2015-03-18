@@ -1147,7 +1147,7 @@ long long pTime;
 
 	sync_arrival = sync->getTimestamp();
 
-	sync_arrival = AdjustBadTimestamp( sync_arrival, preciseOriginTimestamp ); // trb 20150128
+//	sync_arrival = AdjustBadTimestamp( sync_arrival, preciseOriginTimestamp ); // trb 20150128
 
 	delay = port->getLinkDelay();
 	if ((delay = port->getLinkDelay()) == 3600000000000) {
