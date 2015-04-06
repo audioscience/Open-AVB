@@ -42,6 +42,13 @@
 #include <avbts_ostimer.hpp>
 #include <ptp_parms.h>
 
+//---------------
+#include "Windows.h"
+#include "rtapi.h"
+#include "rtnapi.h"
+
+//#include "RtAniLib.h"
+//-----------------
 
 #define REALLY_UGLY_USE_OF_GLOBAL 1
 
@@ -1092,6 +1099,8 @@ long long g_ll_retry_count;
 
 #endif
 
+#define ENABLE_LOGGING_BEFORE_UPDATE
+
 #ifdef OLD_GPTP
 void PTPMessageFollowUp::processMessage(IEEE1588Port * port)
 {
@@ -1105,6 +1114,44 @@ Timestamp raw_device_time(0, 0, 0);
 	signed long long local_system_offset;
 	signed long long scalar_offset;
 long long pTime;
+
+#ifdef ENABLE_LOGGING_BEFORE_UPDATE
+
+struct PTP_RawRecs
+{
+	// 0x00000000
+	long long ts2ns_sync_arrival;
+	long long correctionField;
+
+	// 0x00000010
+	long long ts2ns_Orig_preciseOriginTimestamp;
+	long long pTime;
+
+	// 0x00000020
+	long long ts2ns_system_time;
+	long long ts2ns_device_time;
+
+	// 0x00000030
+	uint32_t local_clock;
+	uint32_t nominal_clock_rate;
+	uint64_t  delay;
+
+	// 0x00000040
+	long double local_clock_adjustment;
+	long double master_local_freq_offset;
+
+	// 0x00000050
+	long double local_system_freq_offset;
+	long long   local_system_offset;
+
+	// 0x00000050
+	long long   scalar_offset;
+	uint32_t    device_sync_time_offset;
+	int         correction;
+};
+
+struct PTP_RawRecs ptpRaw;
+#endif
 
 	FrequencyRatio local_clock_adjustment;
 	FrequencyRatio local_system_freq_offset;
@@ -1162,15 +1209,33 @@ long long pTime;
 	correctionField = (uint64_t)
 		((correctionField >> 16)/master_local_freq_offset);
 	correction = (int) (delay + correctionField);
+
+#ifdef ENABLE_LOGGING_BEFORE_UPDATE
+	ptpRaw.ts2ns_sync_arrival = TIMESTAMP_TO_NS(sync_arrival);
+	ptpRaw.delay = delay;
+	ptpRaw.correctionField = correctionField;
+	ptpRaw.correction      = correction;
+	ptpRaw.ts2ns_Orig_preciseOriginTimestamp = TIMESTAMP_TO_NS( preciseOriginTimestamp );
+
+	ptpRaw.master_local_freq_offset  = master_local_freq_offset;
+
+#endif
+
 	
 	if( correction > 0 )
 	  TIMESTAMP_ADD_NS( preciseOriginTimestamp, correction );
 	else TIMESTAMP_SUB_NS( preciseOriginTimestamp, -correction );
+
 	scalar_offset  = TIMESTAMP_TO_NS( sync_arrival );
 	scalar_offset -= TIMESTAMP_TO_NS( preciseOriginTimestamp );
 pTime = TIMESTAMP_TO_NS( preciseOriginTimestamp );
 
-	XPTPD_INFO
+#ifdef ENABLE_LOGGING_BEFORE_UPDATE
+	ptpRaw.scalar_offset = scalar_offset;
+	ptpRaw.pTime         = pTime;
+#endif
+
+		XPTPD_INFO
 		("Followup Correction Field: %Ld,%lu", correctionField >> 16,
 		 delay);
 	XPTPD_INFO
@@ -1185,6 +1250,16 @@ pTime = TIMESTAMP_TO_NS( preciseOriginTimestamp );
 
 raw_system_time = system_time;
 raw_device_time = device_time;
+
+#ifdef ENABLE_LOGGING_BEFORE_UPDATE
+
+	ptpRaw.ts2ns_system_time  = TIMESTAMP_TO_NS(system_time);
+	ptpRaw.ts2ns_device_time  = TIMESTAMP_TO_NS(device_time);
+
+	ptpRaw.local_clock        = local_clock;
+	ptpRaw.nominal_clock_rate = nominal_clock_rate;
+
+#endif
 
 	XPTPD_INFO
 		( "Device Time = %llu,System Time = %llu\n",
@@ -1222,6 +1297,15 @@ raw_device_time = device_time;
 		local_system_offset =
 			TIMESTAMP_TO_NS(system_time) - TIMESTAMP_TO_NS(sync_arrival);
 
+#ifdef ENABLE_LOGGING_BEFORE_UPDATE
+		ptpRaw.local_system_freq_offset = local_system_freq_offset;
+		ptpRaw.local_system_offset      = local_system_offset;
+		ptpRaw.local_clock_adjustment   = local_clock_adjustment;
+		ptpRaw.device_sync_time_offset  = device_sync_time_offset;
+
+		RtGenerateEvent( 5555550, (void *)&ptpRaw, sizeof(ptpRaw) );
+
+#endif
 		port->getClock()->setMasterOffset
 			( scalar_offset, sync_arrival, local_clock_adjustment,
 			  local_system_offset, system_time, local_system_freq_offset,
