@@ -595,7 +595,7 @@ void IEEE1588Port::processEvent(Event e)
 					(stderr,
 					 "*** %s Timeout Expired - Becoming Master LastFollowUpPOT=%16llu  LastSyncId=%u\n", 
 					 e == ANNOUNCE_RECEIPT_TIMEOUT_EXPIRES ? "Announce" :
-					 "Sync",  tsTmp, p_dbg_HoldLastFollowup->getSequenceId() );
+					 "Sync",  tsTmp, (p_dbg_HoldLastFollowup==NULL) ? 0 : p_dbg_HoldLastFollowup->getSequenceId() );
 				{
 				  // We're Grandmaster, set grandmaster info to me
 				  ClockIdentity clock_identity;
