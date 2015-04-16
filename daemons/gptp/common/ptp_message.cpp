@@ -833,17 +833,6 @@ bool PTPMessageAnnounce::isBetterThan(PTPMessageAnnounce * msg)
 	this->getGrandmasterIdentity((char *)this1 + 6);
 	msg->getGrandmasterIdentity((char *)that1 + 6);
 
-#if 0
-	fprintf(stderr, "Us: ");
-	for (int i = 0; i < 14; ++i)
-		fprintf(stderr, "%hhx", this1[i]);
-	fprintf(stderr, "\n");
-	fprintf(stderr, "Them: ");
-	for (int i = 0; i < 14; ++i)
-		fprintf(stderr, "%hhx", that1[i]);
-	fprintf(stderr, "\n");
-#endif
-
 	return (memcmp(this1, that1, 14) < 0) ? true : false;
 }
 
@@ -993,13 +982,6 @@ void PTPMessageAnnounce::processMessage(IEEE1588Port * port)
 		   1000000000.0)));
 }
 
-#ifdef TIMESTAMPS_TRAVEL_WITH_DATA_NOT
-
-extern LONGLONG _rtPcapGetLastPacketsEmbeddedTimestamp(); // in rtPcap.cpp
-extern uint16_t RcvSecondsUpperBits;                      // in rtx_Hal.hpp
-extern uint8_t  RcvSecondsVersion;                        // in rtx_Hal.hpp
-
-#endif
 
 void PTPMessageSync::processMessage(IEEE1588Port * port)
 {
@@ -1019,31 +1001,6 @@ void PTPMessageSync::processMessage(IEEE1588Port * port)
 			delete old_sync;
 		}
 		port->setLastSync(this);
-
-
-
-#ifdef TIMESTAMPS_TRAVEL_WITH_DATA_NOT
-
-		// get a pointer to the SYNC message we just stored
-		old_sync = port->getLastSync();
-
-		// retrieve the timestamp which was received along with this message
-		LONGLONG LLstamp = _rtPcapGetLastPacketsEmbeddedTimestamp();
-
-		uint32_t nsec, sec;
-
-		// break time down into 2 32 bit values
-		sec = (LLstamp >> 32);
-		nsec = (uint32_t)(LLstamp & 0xFFFFFFFF);
-
-		// instantiate a Timestamp object
-		Timestamp syncTS( nsec, sec, RcvSecondsUpperBits, RcvSecondsVersion );
-
-		// pass this object to the sync we have stored.
-		old_sync->setTimestamp( syncTS );
-#endif
-
-
 
 		_gc = false;
 		goto done;
@@ -1133,7 +1090,7 @@ long long g_ll_retry_count;
 
 #endif
 
-#define ENABLE_LOGGING_BEFORE_UPDATE
+#define NOT_ENABLE_LOGGING_BEFORE_UPDATE
 
 #ifdef OLD_GPTP
 void PTPMessageFollowUp::processMessage(IEEE1588Port * port)
