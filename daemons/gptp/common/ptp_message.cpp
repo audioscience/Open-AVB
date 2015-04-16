@@ -993,7 +993,7 @@ void PTPMessageAnnounce::processMessage(IEEE1588Port * port)
 		   1000000000.0)));
 }
 
-#ifdef TIMESTAMPS_TRAVEL_WITH_DATA
+#ifdef TIMESTAMPS_TRAVEL_WITH_DATA_NOT
 
 extern LONGLONG _rtPcapGetLastPacketsEmbeddedTimestamp(); // in rtPcap.cpp
 extern uint16_t RcvSecondsUpperBits;                      // in rtx_Hal.hpp
@@ -1022,7 +1022,7 @@ void PTPMessageSync::processMessage(IEEE1588Port * port)
 
 
 
-#ifdef TIMESTAMPS_TRAVEL_WITH_DATA
+#ifdef TIMESTAMPS_TRAVEL_WITH_DATA_NOT
 
 		// get a pointer to the SYNC message we just stored
 		old_sync = port->getLastSync();
