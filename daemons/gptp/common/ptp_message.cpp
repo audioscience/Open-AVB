@@ -52,6 +52,8 @@
 
 #define REALLY_UGLY_USE_OF_GLOBAL 1
 
+extern uint32_t GetNeighborPropDelayThreshold();
+
 // holds a copy of each SYNC message we respond to.
 //PTPMessageSync *p_dbg_HoldLastSync = NULL;
 
@@ -1807,6 +1809,11 @@ void PTPMessagePathDelayRespFollowUp::processMessage(IEEE1588Port * port)
 	link_delay +=
 		(response_rx_timestamp.nanoseconds * 1LL -
 		 request_tx_timestamp.nanoseconds);
+
+	if( link_delay > GetNeighborPropDelayThreshold() )
+	{
+//		RtPrintf( " Should Kill asCapable, Link_delay=%d, thresh=%d", link_delay, GetNeighborPropDelayThreshold() );
+	}
 
 	turn_around =
 		((remote_resp_tx_timestamp.seconds_ms * 1LL -
