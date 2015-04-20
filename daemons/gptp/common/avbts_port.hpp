@@ -270,6 +270,7 @@ class IEEE1588Port {
 	void removeForeignMasterAll(void);
 
 	void setAsCapable(bool ascap);
+	bool getAsCapable() { return( asCapable ); }
 
 	void addQualifiedAnnounce(PTPMessageAnnounce * msg) {
 		if( qualified_announce != NULL ) delete qualified_announce;

@@ -1698,6 +1698,8 @@ void PTPMessagePathDelayRespFollowUp::processMessage(IEEE1588Port * port)
 	Timestamp remote_req_rx_timestamp(0, 0, 0);
 	Timestamp response_rx_timestamp(0, 0, 0);
 
+	bool localAsCapableFlag = true;
+
 	if (port->getPortState() == PTP_DISABLED) {
 		// Do nothing all messages should be ignored when in this state
 		return;
@@ -1810,11 +1812,6 @@ void PTPMessagePathDelayRespFollowUp::processMessage(IEEE1588Port * port)
 		(response_rx_timestamp.nanoseconds * 1LL -
 		 request_tx_timestamp.nanoseconds);
 
-	if( link_delay > GetNeighborPropDelayThreshold() )
-	{
-//		RtPrintf( " Should Kill asCapable, Link_delay=%d, thresh=%d", link_delay, GetNeighborPropDelayThreshold() );
-	}
-
 	turn_around =
 		((remote_resp_tx_timestamp.seconds_ms * 1LL -
 		  remote_req_rx_timestamp.seconds_ms) << 32) * 1000000000;
@@ -1845,6 +1842,16 @@ void PTPMessagePathDelayRespFollowUp::processMessage(IEEE1588Port * port)
 	link_delay -= turn_around;
 	link_delay /= 2;
 
+	// moved to end of calculation of link_delay in case my original assumptions were correct
+	if( (port->getAsCapable() != false) && (link_delay > GetNeighborPropDelayThreshold()) )
+	{
+		XPTPD_ERROR
+		    ("Remove asCapable - link_delay=%d > NeighborPropDelayThreshold=%d ", 
+			link_delay, GetNeighborPropDelayThreshold() );
+
+		localAsCapableFlag = false;
+	}
+
 	{
 		uint64_t mine_elapsed;
 	    uint64_t theirs_elapsed;
@@ -1858,7 +1865,7 @@ void PTPMessagePathDelayRespFollowUp::processMessage(IEEE1588Port * port)
 			theirs_elapsed += link_delay;
 			rate_offset =  ((FrequencyRatio) mine_elapsed)/theirs_elapsed;
 			port->setPeerRateOffset(rate_offset);
-			port->setAsCapable( true );
+			port->setAsCapable( localAsCapableFlag );
 		}
 	}
 	port->setLinkDelay( link_delay );
