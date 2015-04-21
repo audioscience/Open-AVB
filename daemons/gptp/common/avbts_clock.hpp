@@ -245,7 +245,6 @@ public:
 
 	void setSharedAsCapable(bool asCapable);
 	bool checkPriority1Update(uint32_t *newPriority);
-#ifdef OLD_GPTP
 	void setMasterOffset
 	( int64_t master_local_offset, Timestamp local_time,
 		FrequencyRatio master_local_freq_offset, int64_t local_system_offset,
@@ -253,12 +252,7 @@ public:
 		unsigned sync_count, unsigned pdelay_count, PortState port_state , long long pTime,
 		Timestamp raw_system_time, Timestamp raw_device_time,
 		long long qp_prior_time,  long long qp_after_time, long long ll_retry_count );
-#else
-
-	void setMasterOffset
-	( struct masterToLocal master_to_local, struct localToSystem local_to_system,
-	  unsigned sync_count, unsigned pdelay_count, PortState port_state );
-#endif
+	  FrequencyRatio master_local_freq_offset,
 	
 	ClockIdentity getClockIdentity() {
 		return clock_identity;
