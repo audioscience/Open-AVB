@@ -53,17 +53,6 @@ struct ClockQuality {
 	int16_t offsetScaledLogVariance;
 };
 
-struct masterToLocal {
-	Timestamp		preciseOriginTimestamp;
-	Timestamp		sync_arrival;
-	FrequencyRatio	freq_ratio;
-};
-struct localToSystem {
-	Timestamp		device_time;
-	Timestamp		system_time;
-	FrequencyRatio	freq_ratio;
-};
-
 class IEEE1588Clock {
 private:
 	ClockIdentity clock_identity;
