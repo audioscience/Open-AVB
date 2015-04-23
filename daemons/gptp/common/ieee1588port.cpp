@@ -86,7 +86,6 @@ IEEE1588Port::IEEE1588Port
 	port_state = PTP_INITIALIZING;
 
 	asCapable = false;
-//	clock->setSharedAsCapable(false);
 
 	announce_sequence_id = 0;
 	sync_sequence_id = 0;
@@ -414,7 +413,7 @@ void IEEE1588Port::processEvent(Event e)
 			}
 
 			if( clock->getPriority1() == 255 || port_state == PTP_SLAVE ) {
-				becomeSlave( false );
+				becomeSlave( true );
 			} else if( port_state == PTP_MASTER ) {
 				becomeMaster( true );
 			} else {
@@ -857,6 +856,7 @@ void IEEE1588Port::processEvent(Event e)
 				  clock->addEventTimer
 					  ( this, SYNC_INTERVAL_TIMEOUT_EXPIRES, wait_time );
 			  }
+			  
 			}
 			break;
 	case ANNOUNCE_INTERVAL_TIMEOUT_EXPIRES:

@@ -353,8 +353,6 @@ void IEEE1588Clock::setMasterOffset
 		  pdelay_count, port_state , pTime,
 		  raw_system_time, raw_device_time,
 		  ll_raw_prior_time,  ll_raw_after_time, ll_retry_count );
-
-		ipc->setSharedGrandmasterClockId(grandmaster_clock_identity);
 	}
 
 	if( master_local_offset == 0 && master_local_freq_offset == 1.0 ) {
