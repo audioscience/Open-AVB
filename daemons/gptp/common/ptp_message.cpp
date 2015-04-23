@@ -894,7 +894,6 @@ long long g_ll_retry_count;
 
 #endif
 
-#ifdef OLD_GPTP
 void PTPMessageFollowUp::processMessage(IEEE1588Port * port)
 {
 	uint64_t delay;
@@ -1047,101 +1046,6 @@ done:
 	return;
 }
 
-#else
-
-void PTPMessageFollowUp::processMessage(IEEE1588Port * port)
-{
-	uint64_t delay;
-	Timestamp sync_arrival;
-	Timestamp system_time(0, 0, 0);
-	Timestamp device_time(0, 0, 0);
-
-	struct masterToLocal master_to_local;
-	struct localToSystem local_to_system;
-
-	XPTPD_INFO("Processing a follow-up message");
-
-	// Expire any SYNC_RECEIPT timers that exist
-	port->getClock()->deleteEventTimerLocked
-		(port, SYNC_RECEIPT_TIMEOUT_EXPIRES);
-
-	if (port->getPortState() == PTP_DISABLED ) {
-		// Do nothing Sync messages should be ignored when in this state
-		return;
-	}
-	if (port->getPortState() == PTP_FAULTY) {
-		// According to spec recovery is implementation specific
-		port->recoverPort();
-		return;
-	}
-
-	PortIdentity sync_id;
-	PTPMessageSync *sync = port->getLastSync();
-	if (sync == NULL) {
-		XPTPD_ERROR("Received Follow Up but there is no sync message");
-		return;
-	}
-	sync->getPortIdentity(&sync_id);
-
-	if (sync->getSequenceId() != sequenceId || sync_id != *sourcePortIdentity)
-	{
-		XPTPD_ERROR
-		    ("Received Follow Up but cannot find corresponding Sync");
-		goto done;
-	}
-
-	sync_arrival = sync->getTimestamp();
-
-	delay = port->getLinkDelay();
-	if ((delay = port->getLinkDelay()) == 3600000000000) {
-		goto done;
-	}
-
-	/* Otherwise synchronize clock with approximate time from Sync message */
-	uint32_t local_clock, nominal_clock_rate;
-
-	port->getDeviceTime(system_time, device_time, local_clock,
-			    nominal_clock_rate);
-	XPTPD_INFO
-		( "Device Time = %llu,System Time = %llu\n",
-		  TIMESTAMP_TO_NS(device_time), TIMESTAMP_TO_NS(system_time));
-
-	XPTPD_INFO
-	    ("ptp_message::FollowUp::processMessage System time: %u,%u "
-		 "Device Time: %u,%u",
-	     system_time.seconds_ls, system_time.nanoseconds,
-	     device_time.seconds_ls, device_time.nanoseconds);
-
-	if( port->getPortState() != PTP_MASTER ) {
-		port->incSyncCount();
-		master_to_local.preciseOriginTimestamp = preciseOriginTimestamp;
-		master_to_local.sync_arrival = sync_arrival;
-		master_to_local.freq_ratio =  port->getClock()->calcMasterLocalClockRateDifference( preciseOriginTimestamp, sync_arrival );
-		local_to_system.device_time = device_time;
-		local_to_system.system_time = system_time;
-		local_to_system.freq_ratio = port->getClock()->calcLocalSystemClockRateDifference( device_time, system_time );;
-
-		port->getClock()->setMasterOffset
-			( master_to_local, local_to_system,
-			  port->getSyncCount(), port->getPdelayCount(),
-			  port->getPortState() );
-		port->syncDone();
-		// Restart the SYNC_RECEIPT timer
-		port->getClock()->addEventTimerLocked
-			(port, SYNC_RECEIPT_TIMEOUT_EXPIRES, (unsigned long long)
-			 (SYNC_RECEIPT_TIMEOUT_MULTIPLIER *
-			  ((double) pow((double)2, port->getSyncInterval()) *
-			   1000000000.0)));
-	}
-
-done:
-	_gc = true;
-	port->setLastSync(NULL);
-	delete sync;
-	
-	return;
-}
-#endif
 
  PTPMessagePathDelayReq::PTPMessagePathDelayReq(IEEE1588Port * port):
 	 PTPMessageCommon (port)
