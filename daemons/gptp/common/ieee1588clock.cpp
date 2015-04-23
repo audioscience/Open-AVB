@@ -334,19 +334,6 @@ void IEEE1588Clock::setSharedAsCapable(bool asCapable)
 		ipc->setSharedAsCapable(asCapable);
 	}
 }
-
-bool IEEE1588Clock::checkPriority1Update(uint32_t *newPriority)
-{
-	bool needUpdate = false;
-
-	if ( ipc != NULL ) 
-	{
-		needUpdate = ipc->updatePriority1(newPriority);
-	}
-
-	return needUpdate;
-}
-
 void IEEE1588Clock::setMasterOffset
 ( int64_t master_local_offset, Timestamp local_time,
   FrequencyRatio master_local_freq_offset, int64_t local_system_offset,

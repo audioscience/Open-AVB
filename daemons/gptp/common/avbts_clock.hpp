@@ -233,7 +233,6 @@ public:
 	( Timestamp denominator, Timestamp numerator );
 
 	void setSharedAsCapable(bool asCapable);
-	bool checkPriority1Update(uint32_t *newPriority);
 #ifdef OLD_GPTP
 	void setMasterOffset
 	( int64_t master_local_offset, Timestamp local_time,
