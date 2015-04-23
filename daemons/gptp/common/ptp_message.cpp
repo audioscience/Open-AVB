@@ -40,26 +40,7 @@
 #include <avbts_message.hpp>
 #include <avbts_port.hpp>
 #include <avbts_ostimer.hpp>
-#include <ptp_parms.h>
-
-
 #define REALLY_UGLY_USE_OF_GLOBAL 1
-
-uint64_t u_old_POT1 = 0;
-uint64_t u_old_POT2 = 0;
-
-Timestamp old_qTS1(0,0,0);
-Timestamp old_qTS2(0,0,0);
-
-
-uint64_t u_old_qTS1 = 0;
-uint64_t u_old_qTS2 = 0;
-
-static int startcnt=0;
-static int goodcnt=0;
-static uint64_t u_cycles = 0;
-
-static int  bad_in_a_row = 0;
 
 
 #include <stdio.h>
@@ -82,14 +63,12 @@ PTPMessageCommon::PTPMessageCommon(IEEE1588Port * port)
 	return;
 }
 
-
 /* Determine whether the message was sent by given communication technology,
    uuid, and port id fields */
 bool PTPMessageCommon::isSenderEqual(PortIdentity portIdentity)
 {
 	return portIdentity == *sourcePortIdentity;
 }
-
 
 PTPMessageCommon *buildPTPMessage
 (char *buf, int size, LinkLayerAddress * remote, IEEE1588Port * port)
@@ -143,7 +122,7 @@ PTPMessageCommon *buildPTPMessage
 
 	if (!(messageType >> 3)) {
 		int iter = 5;
-		long req = TX_TIMEOUT_BASE;    // was 4000; (trb 20150211)	// = 1 ms
+		long req = 4000;	// = 1 ms
 		int ts_good =
 		    port->getRxTimestamp
 			(sourcePortIdentity, sequenceId, timestamp, counter_value, false);
@@ -434,6 +413,7 @@ PTPMessageCommon *buildPTPMessage
 		{
 			PTPMessageAnnounce *annc = new PTPMessageAnnounce();
 			annc->messageType = messageType;
+			int tlv_length = size - PTP_COMMON_HDR_LENGTH + PTP_ANNOUNCE_LENGTH;
 
 			memcpy(&(annc->currentUtcOffset),
 			       buf +
@@ -476,6 +456,13 @@ PTPMessageCommon *buildPTPMessage
 			       buf +
 			       PTP_ANNOUNCE_TIME_SOURCE(PTP_ANNOUNCE_OFFSET),
 			       sizeof(annc->timeSource));
+
+			// Parse TLV if it exists
+			buf += PTP_COMMON_HDR_LENGTH + PTP_ANNOUNCE_LENGTH;
+			if( tlv_length > (int) (2*sizeof(uint16_t)) && PLAT_ntohs(*((uint16_t *)buf)) == PATH_TRACE_TLV_TYPE)  {
+				buf += sizeof(uint16_t);
+				annc->tlv.parseClockIdentity((uint8_t *)buf);
+			}
 
 			msg = annc;
 		}
@@ -717,6 +704,8 @@ void PTPMessageSync::sendPort(IEEE1588Port * port, PortIdentity * destIdentity)
 	stepsRemoved = 0;
 	timeSource = port->getClock()->getTimeSource();
 	clock_identity = port->getClock()->getGrandmasterClockIdentity();
+	clock_identity.getIdentityString(grandmasterIdentity);
+
 	logMeanMessageInterval = port->getAnnounceInterval();
 	return;
 }
@@ -738,7 +727,7 @@ void PTPMessageAnnounce::sendPort(IEEE1588Port * port,
 	// Create packet in buf
 	// Copy in common header
 	messageLength =
-	    PTP_COMMON_HDR_LENGTH + PTP_ANNOUNCE_LENGTH + sizeof(tlv);
+		PTP_COMMON_HDR_LENGTH + PTP_ANNOUNCE_LENGTH + tlv.length();
 	tspec_msg_t |= messageType & 0xF;
 	buildCommonHeader(buf_ptr);
 	memcpy(buf_ptr + PTP_ANNOUNCE_CURRENT_UTC_OFFSET(PTP_ANNOUNCE_OFFSET),
