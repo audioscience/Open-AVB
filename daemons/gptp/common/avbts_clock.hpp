@@ -228,8 +228,6 @@ public:
 	( Timestamp master_time, Timestamp sync_time );
 	FrequencyRatio calcLocalSystemClockRateDifference
 	( Timestamp local_time, Timestamp system_time );
-	FrequencyRatio calcClockFrequencyRatio
-	( Timestamp denominator, Timestamp numerator );
 
 	void setSharedAsCapable(bool asCapable);
 #ifdef OLD_GPTP
