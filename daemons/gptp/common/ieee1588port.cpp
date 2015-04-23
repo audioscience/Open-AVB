@@ -368,7 +368,7 @@ void IEEE1588Port::sendEventPort(uint8_t * buf, int size,
 				 PortIdentity * destIdentity)
 {
 	net_result rtx = port_send(buf, size, mcast_type, destIdentity, true);
-	if ((rtx != net_succeed) && (rtx != net_trfail)) {
+	if (rtx != net_succeed) {
 		XPTPD_ERROR("sendEventPort(): failure");
 	}
 
@@ -380,7 +380,7 @@ void IEEE1588Port::sendGeneralPort(uint8_t * buf, int size,
 				   PortIdentity * destIdentity)
 {
 	net_result rtx = port_send(buf, size, mcast_type, destIdentity, false);
-	if ((rtx != net_succeed)  && (rtx != net_trfail)) {
+	if (rtx != net_succeed) {
 		XPTPD_ERROR("sendGeneralPort(): failure");
 	}
 
@@ -731,9 +731,7 @@ void IEEE1588Port::processEvent(Event e)
 			}
 			break;
 	case SYNC_INTERVAL_TIMEOUT_EXPIRES:
-
 			XPTPD_INFO("SYNC_INTERVAL_TIMEOUT_EXPIRES occured");
-//fprintf(stderr, "STO\n");
 			{
 				/* Set offset from master to zero, update device vs
 				   system time offset */
