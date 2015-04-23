@@ -1099,11 +1099,6 @@ void PTPMessagePathDelayReq::processMessage(IEEE1588Port * port)
 	this->getPortIdentity(&requestingPortIdentity_p);
 	resp->setRequestingPortIdentity(&requestingPortIdentity_p);
 	resp->setRequestReceiptTimestamp(_timestamp);
-	if( port->getTimestampVersion() != _timestamp._version ) {
-		delete resp;
-XPTPD_ERROR("PTPMessagePathDelayReq: \"port->getTimestampVersion() != _timestamp._version\"\n" );
-		goto done;
-	}
 	port->getTxLock();
 	resp->sendPort(port, sourcePortIdentity);
 
@@ -1134,6 +1129,15 @@ XPTPD_ERROR("PTPMessagePathDelayReq: \"port->getTimestampVersion() != _timestamp
 			  ts_good, msg);
 		delete resp;
 		goto done;
+	}
+
+	if( resp_timestamp._version != _timestamp._version ) {
+		XPTPD_ERROR("TX timestamp version mismatch: %u/%u\n",
+			    resp_timestamp._version, _timestamp._version);
+#if 0 // discarding the request could lead to the peer setting the link to non-asCapable
+		delete resp;
+		goto done;
+#endif
 	}
 
 	resp_fwup = new PTPMessagePathDelayRespFollowUp(port);
@@ -1417,7 +1421,9 @@ void PTPMessagePathDelayRespFollowUp::processMessage(IEEE1588Port * port)
 	remote_resp_tx_timestamp = responseOriginTimestamp;
 
 	if( request_tx_timestamp._version != response_rx_timestamp._version ) {
-	  goto abort;
+		XPTPD_ERROR("RX timestamp version mismatch %d/%d",
+			    request_tx_timestamp._version, response_rx_timestamp._version );
+		goto abort;
 	}
 
 	port->incPdelayCount();
