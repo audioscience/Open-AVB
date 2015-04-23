@@ -757,11 +757,24 @@ void PTPMessageAnnounce::sendPort(IEEE1588Port * port,
 
 void PTPMessageAnnounce::processMessage(IEEE1588Port * port)
 {
+	ClockIdentity my_clock_identity;
+
 	// Delete announce receipt timeout
 	port->getClock()->deleteEventTimerLocked
 		(port, ANNOUNCE_RECEIPT_TIMEOUT_EXPIRES);
 
 	if( stepsRemoved >= 255 ) goto bail;
+
+	// Reject Announce message from myself
+	my_clock_identity = port->getClock()->getClockIdentity();
+	if( sourcePortIdentity->getClockIdentity() == my_clock_identity ) {
+		goto bail;
+	}
+
+	if(tlv.has(&my_clock_identity)) {
+		goto bail;
+	}
+
 	// Add message to the list
 	port->addQualifiedAnnounce(this);
 
