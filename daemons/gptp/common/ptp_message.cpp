@@ -71,6 +71,8 @@ static int  bad_in_a_row = 0;
 
 
 #include <stdio.h>
+#include <string.h>
+#include <math.h>
 
 PTPMessageCommon::PTPMessageCommon(IEEE1588Port * port)
 {
