@@ -920,21 +920,18 @@ long long pTime;
 
 	if (port->getPortState() == PTP_DISABLED ) {
 		// Do nothing Sync messages should be ignored when in this state
-//fprintf( stderr, "PMFU::PM state=%d\n", port->getPortState() );
 		return;
 	}
 	if (port->getPortState() == PTP_FAULTY) {
 		// According to spec recovery is implementation specific
-//fprintf( stderr, "PMFU::PM state=%d\n", port->getPortState() );
 		port->recoverPort();
 		return;
 	}
 
-
 	PortIdentity sync_id;
 	PTPMessageSync *sync = port->getLastSync();
 	if (sync == NULL) {
-		XPTPD_ERROR("Received Follow Up but there is no sync message, Id=[%d]", sequenceId );
+		XPTPD_ERROR("Received Follow Up but there is no sync message");
 		return;
 	}
 	sync->getPortIdentity(&sync_id);
@@ -942,7 +939,7 @@ long long pTime;
 	if (sync->getSequenceId() != sequenceId || sync_id != *sourcePortIdentity)
 	{
 		XPTPD_ERROR
-		    ("Received Follow Up but cannot find corresponding Sync, Id=[%d]", sequenceId);
+		    ("Received Follow Up but cannot find corresponding Sync");
 		goto done;
 	}
 
@@ -1046,7 +1043,6 @@ done:
 	return;
 }
 
-
  PTPMessagePathDelayReq::PTPMessagePathDelayReq(IEEE1588Port * port):
 	 PTPMessageCommon (port)
 {
@@ -1074,14 +1070,12 @@ void PTPMessagePathDelayReq::processMessage(IEEE1588Port * port)
 
 	if (port->getPortState() == PTP_DISABLED) {
 		// Do nothing all messages should be ignored when in this state
-XPTPD_ERROR("PTPMessagePathDelayReq: PTP_DISABLED\n" );
 		goto done;
 	}
 
 	if (port->getPortState() == PTP_FAULTY) {
 		// According to spec recovery is implementation specific
 		port->recoverPort();
-XPTPD_ERROR("PTPMessagePathDelayReq: PTP_FAULTY\n" );
 		goto done;
 	}
 
@@ -1455,11 +1449,11 @@ void PTPMessagePathDelayRespFollowUp::processMessage(IEEE1588Port * port)
 	}
 
 	XPTPD_INFO
-		("Turn Around Adjustment %Ld",
+		("Turn Around Adjustment %Lf",
 		 ((long long)turn_around * port->getPeerRateOffset()) /
 		 1000000000000LL);
 	XPTPD_INFO
-		("Step #1: Turn Around Adjustment %Ld",
+		("Step #1: Turn Around Adjustment %Lf",
 		 ((long long)turn_around * port->getPeerRateOffset()));
 	XPTPD_INFO("Adjusted Peer turn around is %Lu", turn_around);
 
