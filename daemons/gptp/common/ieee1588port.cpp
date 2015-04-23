@@ -48,11 +48,6 @@
 #include <stdlib.h>
 #include <Windows.h>
 
-// defined in ptp_message.cpp - trb 20150130
-
-//extern PTPMessageSync     dbg_HoldLastSync;
-extern PTPMessageFollowUp    *p_dbg_HoldLastFollowup;
-
 LinkLayerAddress IEEE1588Port::other_multicast(OTHER_MULTICAST);
 LinkLayerAddress IEEE1588Port::pdelay_multicast(PDELAY_MULTICAST);
 
@@ -587,15 +582,11 @@ void IEEE1588Port::processEvent(Event e)
 			    || port_state == PTP_UNCALIBRATED
 			    || port_state == PTP_SLAVE
 			    || port_state == PTP_PRE_MASTER) {
-					Timestamp tsTmp(0,0,0);
-					if(NULL!=p_dbg_HoldLastFollowup) {
-						tsTmp = p_dbg_HoldLastFollowup->getPreciseOriginTimestamp();
-					}
 				fprintf
 					(stderr,
-					 "*** %s Timeout Expired - Becoming Master LastFollowUpPOT=%16llu  LastSyncId=%u\n", 
+					 "*** %s Timeout Expired - Becoming Master\n", 
 					 e == ANNOUNCE_RECEIPT_TIMEOUT_EXPIRES ? "Announce" :
-					 "Sync",  tsTmp, (p_dbg_HoldLastFollowup==NULL) ? 0 : p_dbg_HoldLastFollowup->getSequenceId() );
+					 "Sync" );
 				{
 				  // We're Grandmaster, set grandmaster info to me
 				  ClockIdentity clock_identity;
