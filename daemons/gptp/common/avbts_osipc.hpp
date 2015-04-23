@@ -48,19 +48,13 @@ inline OS_IPC_ARG::~OS_IPC_ARG () { }
 class OS_IPC {
 public:
     virtual bool init( OS_IPC_ARG *arg = NULL ) = 0;
-#ifdef OLD_GPTP
     virtual bool update
 	( int64_t  ml_phoffset,   int64_t ls_phoffset,
 	  FrequencyRatio  ml_freqoffset, FrequencyRatio ls_freq_offset,
 	  uint64_t local_time, uint32_t sync_count, uint32_t pdelay_count,
 	  PortState port_state , long long pTime/*DEBUG*/,Timestamp raw_system_time, Timestamp raw_device_time,
 	  long long ll_raw_prior_time,  long long ll_raw_after_time,  long long ll_retry_count ) = 0;
-#else
-    virtual bool update
-	( struct masterToLocal master_to_local, struct localToSystem local_to_system, 
-		uint32_t sync_count, uint32_t pdelay_count,
-		PortState port_state ) = 0;
-#endif
+
 	virtual bool setSharedGrandmasterClockId(ClockIdentity clockId) = 0;
 	virtual bool setSharedAsCapable( bool asCapable ) = 0;
 	virtual bool updatePriority1(uint32_t *newPriority) = 0;
