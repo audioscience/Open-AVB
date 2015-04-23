@@ -86,7 +86,7 @@ IEEE1588Port::IEEE1588Port
 	port_state = PTP_INITIALIZING;
 
 	asCapable = false;
-	clock->setSharedAsCapable(false);
+//	clock->setSharedAsCapable(false);
 
 	announce_sequence_id = 0;
 	sync_sequence_id = 0;
