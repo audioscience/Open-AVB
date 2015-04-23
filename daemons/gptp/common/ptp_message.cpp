@@ -707,7 +707,7 @@ void PTPMessageSync::sendPort(IEEE1588Port * port, PortIdentity * destIdentity)
 	ClockIdentity clock_identity;
 
 	id = port->getClock()->getClockIdentity();
-	tlv.setClockIdentity(&id);
+	tlv.appendClockIdentity(&id);
 
 	currentUtcOffset = port->getClock()->getCurrentUtcOffset();
 	grandmasterPriority1 = port->getClock()->getPriority1();
