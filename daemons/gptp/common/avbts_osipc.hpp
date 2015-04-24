@@ -55,7 +55,6 @@ public:
 	  PortState port_state , long long pTime/*DEBUG*/,Timestamp raw_system_time, Timestamp raw_device_time,
 	  long long ll_raw_prior_time,  long long ll_raw_after_time,  long long ll_retry_count ) = 0;
 
-	virtual bool setSharedGrandmasterClockId(ClockIdentity clockId) = 0;
 	virtual bool setSharedAsCapable( bool asCapable ) = 0;
 	virtual bool updatePriority1(uint32_t *newPriority) = 0;
 	virtual ~OS_IPC() = 0;
