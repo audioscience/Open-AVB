@@ -833,7 +833,7 @@ void IEEE1588Port::processEvent(Event e)
 			  clock->setMasterOffset
 				  (0, device_time, 1.0, local_system_offset,
 				   system_time, local_system_freq_offset, sync_count,
-				   pdelay_count, port_state , 0/*DEBUG*/, system_time, system_time, 0, 0, 0 );
+				   pdelay_count, port_state );
 
 			  /* If accelerated_sync is non-zero then start 16 ms sync
 				 timer, subtract 1, for last one start PDelay also */

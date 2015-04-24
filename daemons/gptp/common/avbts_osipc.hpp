@@ -52,10 +52,9 @@ public:
 	( int64_t  ml_phoffset,   int64_t ls_phoffset,
 	  FrequencyRatio  ml_freqoffset, FrequencyRatio ls_freq_offset,
 	  uint64_t local_time, uint32_t sync_count, uint32_t pdelay_count,
-	  PortState port_state , long long pTime/*DEBUG*/,Timestamp raw_system_time, Timestamp raw_device_time,
-	  long long ll_raw_prior_time,  long long ll_raw_after_time,  long long ll_retry_count ) = 0;
-
+	  PortState port_state ) = 0;
 	virtual bool setSharedAsCapable( bool asCapable ) = 0;
+
 	virtual ~OS_IPC() = 0;
 };
 

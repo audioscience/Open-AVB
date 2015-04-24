@@ -36,8 +36,6 @@
 #include <avbts_message.hpp>
 #include <avbts_port.hpp>
 #include <avbts_ostimer.hpp>
-#define REALLY_UGLY_USE_OF_GLOBAL 1
-
 
 #include <stdio.h>
 #include <string.h>
@@ -884,26 +882,15 @@ void PTPMessageFollowUp::sendPort(IEEE1588Port * port,
 	return;
 }
 
-#ifdef REALLY_UGLY_USE_OF_GLOBAL
-
-long long g_ll_raw_Prior;
-long long g_ll_raw_After;
-long long g_ll_retry_count;
-
-#endif
-
 void PTPMessageFollowUp::processMessage(IEEE1588Port * port)
 {
 	uint64_t delay;
 	Timestamp sync_arrival;
 	Timestamp system_time(0, 0, 0);
-Timestamp raw_system_time(0, 0, 0);
 	Timestamp device_time(0, 0, 0);
-Timestamp raw_device_time(0, 0, 0);
 
 	signed long long local_system_offset;
 	signed long long scalar_offset;
-long long pTime;
 
 	FrequencyRatio local_clock_adjustment;
 	FrequencyRatio local_system_freq_offset;
@@ -962,7 +949,6 @@ long long pTime;
 	else TIMESTAMP_SUB_NS( preciseOriginTimestamp, -correction );
 	scalar_offset  = TIMESTAMP_TO_NS( sync_arrival );
 	scalar_offset -= TIMESTAMP_TO_NS( preciseOriginTimestamp );
-pTime = TIMESTAMP_TO_NS( preciseOriginTimestamp );
 
 	XPTPD_INFO
 		("Followup Correction Field: %Ld,%lu", correctionField >> 16,
@@ -976,10 +962,6 @@ pTime = TIMESTAMP_TO_NS( preciseOriginTimestamp );
 
 	port->getDeviceTime(system_time, device_time, local_clock,
 			    nominal_clock_rate);
-
-raw_system_time = system_time;
-raw_device_time = device_time;
-
 	XPTPD_INFO
 		( "Device Time = %llu,System Time = %llu\n",
 		  TIMESTAMP_TO_NS(device_time), TIMESTAMP_TO_NS(system_time));
@@ -1020,10 +1002,7 @@ raw_device_time = device_time;
 			( scalar_offset, sync_arrival, local_clock_adjustment,
 			  local_system_offset, system_time, local_system_freq_offset,
 			  port->getSyncCount(), port->getPdelayCount(),
-			  port->getPortState() , pTime, raw_system_time, raw_device_time,
-              g_ll_raw_Prior,  g_ll_raw_After, g_ll_retry_count	);
-
-
+			  port->getPortState() );
 		port->syncDone();
 		// Restart the SYNC_RECEIPT timer
 		port->getClock()->addEventTimerLocked

@@ -338,22 +338,15 @@ void IEEE1588Clock::setMasterOffset
 ( int64_t master_local_offset, Timestamp local_time,
   FrequencyRatio master_local_freq_offset, int64_t local_system_offset,
   Timestamp system_time, FrequencyRatio local_system_freq_offset,
-  unsigned sync_count, unsigned pdelay_count, PortState port_state , long long pTime,
-  Timestamp raw_system_time, Timestamp raw_device_time,
-  long long ll_raw_prior_time,  long long ll_raw_after_time, long long ll_retry_count )
+  unsigned sync_count, unsigned pdelay_count, PortState port_state )
 {
 	_master_local_freq_offset = master_local_freq_offset;
 	_local_system_freq_offset = local_system_freq_offset;
 
-	if( ipc != NULL )
-	{
-		ipc->update
+	if( ipc != NULL ) ipc->update
 		( master_local_offset, local_system_offset, master_local_freq_offset,
 		  local_system_freq_offset, TIMESTAMP_TO_NS(local_time), sync_count,
-		  pdelay_count, port_state , pTime,
-		  raw_system_time, raw_device_time,
-		  ll_raw_prior_time,  ll_raw_after_time, ll_retry_count );
-	}
+		  pdelay_count, port_state );
 
 	if( master_local_offset == 0 && master_local_freq_offset == 1.0 ) {
 		return;
