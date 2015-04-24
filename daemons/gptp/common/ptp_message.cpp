@@ -998,6 +998,8 @@ void PTPMessageFollowUp::processMessage(IEEE1588Port * port)
 		local_system_offset =
 			TIMESTAMP_TO_NS(system_time) - TIMESTAMP_TO_NS(sync_arrival);
 
+
+
 		port->getClock()->setMasterOffset
 			( scalar_offset, sync_arrival, local_clock_adjustment,
 			  local_system_offset, system_time, local_system_freq_offset,

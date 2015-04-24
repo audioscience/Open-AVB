@@ -46,6 +46,7 @@
 #include <math.h>
 
 #include <stdlib.h>
+
 #include <Windows.h>
 
 LinkLayerAddress IEEE1588Port::other_multicast(OTHER_MULTICAST);
@@ -157,19 +158,6 @@ bool IEEE1588Port::init_port()
 	port_ready_condition = condition_factory->createCondition();
 
 	return true;
-}
-
-void IEEE1588Port::setAsCapable(bool ascap) 
-{
-	if (ascap != asCapable) {
-		fprintf(stderr, "AsCapable: %s\n",
-				ascap == true ? "Enabled" : "Disabled");
-	}
-	if(!ascap){
-		_peer_offset_init = false;
-	}
-	asCapable = ascap;
-	clock->setSharedAsCapable(asCapable);
 }
 
 void IEEE1588Port::startPDelay() {
