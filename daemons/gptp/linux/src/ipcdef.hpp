@@ -34,6 +34,9 @@
 #ifndef IPCDEF_HPP
 #define IPCDEF_HPP
 
+#include <sys/types.h>
+#include <ptptypes.hpp>
+
 typedef struct { 
 	int64_t ml_phoffset;
 	int64_t ls_phoffset;
@@ -43,6 +46,7 @@ typedef struct {
 	uint32_t sync_count;
 	uint32_t pdelay_count;
 	PortState port_state;
+	pid_t  process_id;
 } gPtpTimeData;
 
 
