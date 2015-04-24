@@ -159,19 +159,6 @@ bool IEEE1588Port::init_port()
 	return true;
 }
 
-void IEEE1588Port::setAsCapable(bool ascap) 
-{
-	if (ascap != asCapable) {
-		fprintf(stderr, "AsCapable: %s\n",
-				ascap == true ? "Enabled" : "Disabled");
-	}
-	if(!ascap){
-		_peer_offset_init = false;
-	}
-	asCapable = ascap;
-	clock->setSharedAsCapable(asCapable);
-}
-
 void IEEE1588Port::startPDelay() {
 	pdelay_started = true;
 	clock->addEventTimer( this, PDELAY_INTERVAL_TIMEOUT_EXPIRES, 32000000 );

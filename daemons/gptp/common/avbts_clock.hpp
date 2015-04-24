@@ -229,8 +229,6 @@ public:
 	FrequencyRatio calcLocalSystemClockRateDifference
 	( Timestamp local_time, Timestamp system_time );
 
-	void setSharedAsCapable(bool asCapable);
-
 	void setMasterOffset
 	( int64_t master_local_offset, Timestamp local_time,
 		FrequencyRatio master_local_freq_offset, int64_t local_system_offset,
