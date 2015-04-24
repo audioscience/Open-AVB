@@ -326,6 +326,14 @@ FrequencyRatio IEEE1588Clock::calcMasterLocalClockRateDifference( Timestamp mast
 	return ppt_offset;
 }
 
+
+void IEEE1588Clock::setSharedAsCapable(bool asCapable)
+{
+	if ( ipc != NULL ) 
+	{
+		ipc->setSharedAsCapable(asCapable);
+	}
+}
 void IEEE1588Clock::setMasterOffset
 ( int64_t master_local_offset, Timestamp local_time,
   FrequencyRatio master_local_freq_offset, int64_t local_system_offset,
