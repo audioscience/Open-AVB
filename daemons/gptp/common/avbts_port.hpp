@@ -48,12 +48,6 @@
 #include <map>
 #include <list>
 
-#define REALLY_UGLY_USE_OF_GLOBAL_FOR_ASCAPABLE
-
-#ifdef REALLY_UGLY_USE_OF_GLOBAL_FOR_ASCAPABLE
-extern uint32_t g_asCapableFlag;
-#endif
-
 #define GPTP_MULTICAST 0x0180C200000EULL
 #define PDELAY_MULTICAST GPTP_MULTICAST
 #define OTHER_MULTICAST GPTP_MULTICAST
@@ -243,10 +237,6 @@ class IEEE1588Port {
 			_peer_offset_init = false;
 		}
 		asCapable = ascap;
-
-#ifdef REALLY_UGLY_USE_OF_GLOBAL_FOR_ASCAPABLE
-		g_asCapableFlag = ascap;
-#endif		
 	}
 
 	bool getAsCapable() { return( asCapable ); }
