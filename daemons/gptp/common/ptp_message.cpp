@@ -1389,6 +1389,7 @@ void PTPMessagePathDelayRespFollowUp::processMessage(IEEE1588Port * port)
 			delete port->getLastPDelayRespFollowUp();
 		}
 		port->setLastPDelayRespFollowUp(this);
+		_gc = false;
 		port->getClock()->addEventTimerLocked
 			(port, PDELAY_DEFERRED_PROCESSING, 1000000);
 		goto defer;
@@ -1465,10 +1466,12 @@ void PTPMessagePathDelayRespFollowUp::processMessage(IEEE1588Port * port)
 	port->setLinkDelay( link_delay );
 	port->setPeerOffset( request_tx_timestamp, remote_req_rx_timestamp );
 
- abort:
-	delete req;
+abort:
+	if (req)
+		delete req;
 	port->setLastPDelayReq(NULL);
-	delete resp;
+	if (resp)
+		delete resp;
 	port->setLastPDelayResp(NULL);
 
 	_gc = true;
