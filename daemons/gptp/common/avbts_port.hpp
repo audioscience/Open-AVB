@@ -230,8 +230,7 @@ class IEEE1588Port {
 	}
 	void setAsCapable(bool ascap) {
 		if (ascap != asCapable) {
-			fprintf(stderr, "AsCapable: %s\n",
-					ascap == true ? "Enabled" : "Disabled");
+			XPTPD_PRINTF("AsCapable: %s\n",ascap == true ? "Enabled" : "Disabled");
 		}
 		if(!ascap){
 			_peer_offset_init = false;

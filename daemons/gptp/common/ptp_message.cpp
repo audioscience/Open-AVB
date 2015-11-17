@@ -124,8 +124,7 @@ PTPMessageCommon *buildPTPMessage
 			// Waits at least 1 time slice regardless of size of 'req'
 			timer->sleep(req);
 			if (ts_good != -72)
-				fprintf
-					( stderr, "Error (RX) timestamping RX event packet (Retrying), error=%d\n",
+				XPTPD_PRINTF("Error (RX) timestamping RX event packet (Retrying), error=%d\n",
 					  ts_good );
 			ts_good =
 			    port->getRxTimestamp(sourcePortIdentity, sequenceId,
@@ -1201,7 +1200,7 @@ void PTPMessagePathDelayResp::processMessage(IEEE1588Port * port)
 	}
 	
 	if (port->tryPDelayRxLock() != true) {
-		fprintf(stderr, "Failed to get PDelay RX Lock\n");
+		XPTPD_PRINTF("Failed to get PDelay RX Lock\n");
 		return;
 	}
 
@@ -1433,7 +1432,6 @@ void PTPMessagePathDelayRespFollowUp::processMessage(IEEE1588Port * port)
 		  port->getPeerRateOffset() < 1.002 ) {
 		turn_around = (int64_t) (turn_around * port->getPeerRateOffset());
 	}
-
 	XPTPD_INFO
 		("Turn Around Adjustment %Lf",
 		 ((long long)turn_around * port->getPeerRateOffset()) /

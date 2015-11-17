@@ -53,13 +53,13 @@ inline uint64_t getTSCFrequency( unsigned millis ) {
 	if( RegGetValue( HKEY_LOCAL_MACHINE, "HARDWARE\\DESCRIPTION\\System\\CentralProcessor\\0", "~MHz", RRF_RT_REG_DWORD, NULL, &mhz, &mhz_sz ) != ERROR_SUCCESS ) {
 		goto done;
 	}
-	fprintf( stderr, "mhz: %u\n", mhz );
+	XPTPD_PRINTF("mhz: %u\n", mhz);
 	multiplierx2 = (UINT16)((2*mhz*1000000ULL)/BASE_FREQUENCY);
 	if( multiplierx2 % 2 == 1 ) ++multiplierx2;
-	fprintf( stderr, "Multiplier: %hhu\n", multiplierx2/2 );
+	XPTPD_PRINTF("Multiplier: %hhu\n", multiplierx2 / 2);
 
 	frequency = (((uint64_t)multiplierx2)*BASE_FREQUENCY)/2;
-	fprintf( stderr, "Frequency: %llu\n", frequency );
+	XPTPD_PRINTF("Frequency: %llu\n", frequency);
 
 done:
 	return frequency;
