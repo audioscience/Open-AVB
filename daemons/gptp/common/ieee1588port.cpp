@@ -294,7 +294,7 @@ void *IEEE1588Port::openPort(void)
 {
 	port_ready_condition->signal();
 
-	XPTPD_INFO("*ID* gPTP %s PID %d  TID %d\n\n", __FUNCTION__, GetCurrentProcessId(), GetCurrentThreadId());
+	XPTPD_PRINTF("*ID* gPTP %s PID %d  TID %d\n\n", __FUNCTION__, GetCurrentProcessId(), GetCurrentThreadId());
 
 	while (1) {
 		PTPMessageCommon *msg;
