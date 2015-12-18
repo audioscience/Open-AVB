@@ -56,7 +56,7 @@ inline uint64_t getTSCFrequency( unsigned millis ) {
 	XPTPD_PRINTF("mhz: %u\n", mhz);
 	multiplierx2 = (UINT16)((2*mhz*1000000ULL)/BASE_FREQUENCY);
 	if( multiplierx2 % 2 == 1 ) ++multiplierx2;
-	XPTPD_PRINTF("Multiplier: %hhu\n", multiplierx2 / 2);
+	XPTPD_PRINTF("Multiplier: %hu\n", multiplierx2 / 2);
 
 	frequency = (((uint64_t)multiplierx2)*BASE_FREQUENCY)/2;
 	XPTPD_PRINTF("Frequency: %llu\n", frequency);
