@@ -950,7 +950,7 @@ void PTPMessageFollowUp::processMessage(IEEE1588Port * port)
 	scalar_offset -= TIMESTAMP_TO_NS( preciseOriginTimestamp );
 
 	XPTPD_INFO
-		("Followup Correction Field: %Ld,%lu", correctionField >> 16,
+		("Followup Correction Field: %lld,%lu", correctionField >> 16,
 		 delay);
 	XPTPD_INFO
 		("FollowUp Scalar = %lld", scalar_offset);
