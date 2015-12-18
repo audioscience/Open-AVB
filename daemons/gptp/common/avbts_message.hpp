@@ -258,7 +258,7 @@ class PathTraceTLV {
 		*((uint16_t *)byte_str) = tlvType;  // tlvType already in network byte order
 		byte_str += sizeof(tlvType);
 		*((uint16_t *)byte_str) =
-			PLAT_htons(identityList.size()*PTP_CLOCK_IDENTITY_LENGTH);
+			PLAT_htons((uint16_t)(identityList.size()*PTP_CLOCK_IDENTITY_LENGTH));
 		byte_str += sizeof(uint16_t);
 		for
 			(iter = identityList.begin();
@@ -276,7 +276,7 @@ class PathTraceTLV {
 		// Total length of TLV is length of type field (UINT16) + length of 'length'
 		// field (UINT16) + length of
 		// identities (each PTP_CLOCK_IDENTITY_LENGTH) in the path
-		return 2*sizeof(uint16_t) + PTP_CLOCK_IDENTITY_LENGTH*identityList.size();
+		return (int)(2*sizeof(uint16_t) + PTP_CLOCK_IDENTITY_LENGTH*identityList.size());
 	}
 };
 
