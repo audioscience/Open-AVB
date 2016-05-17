@@ -154,6 +154,13 @@ int _tmain(int argc, _TCHAR* argv[])
 	parseMacAddr( argv[i], local_addr_ostr );
 	LinkLayerAddress local_addr(local_addr_ostr);
 	portInit.net_label = &local_addr;
+
+	// ToDo - read this information from a .ini file
+	phy_delays[0] = 184;  // Intel i210 default GB TX PHY DELAY (in nanoseconds)
+	phy_delays[1] = 382;  // Intel i210 default GB RX PHY DELAY (in nanoseconds)
+	phy_delays[2] = 1044; // Intel i210 default MB TX PHY DELAY (in nanoseconds)
+	phy_delays[3] = 2133; // Intel i210 default MB RX PHY DELAY (in nanoseconds)
+
 	// Create HWTimestamper object
 	portInit.timestamper = new WindowsTimestamper();
 	// Create Clock object
