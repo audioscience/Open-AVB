@@ -1020,7 +1020,7 @@ int IEEE1588Port::getTxTimestamp
 	PortIdentity identity;
 	msg->getPortIdentity(&identity);
 	return getTxTimestamp
-		(&identity, msg->getSequenceId(), timestamp, counter_value, last);
+		(&identity, msg->getMessageId(), timestamp, counter_value, last);
 }
 
 int IEEE1588Port::getRxTimestamp(PTPMessageCommon * msg, Timestamp & timestamp,
@@ -1029,16 +1029,16 @@ int IEEE1588Port::getRxTimestamp(PTPMessageCommon * msg, Timestamp & timestamp,
 	PortIdentity identity;
 	msg->getPortIdentity(&identity);
 	return getRxTimestamp
-		(&identity, msg->getSequenceId(), timestamp, counter_value, last);
+		(&identity, msg->getMessageId(), timestamp, counter_value, last);
 }
 
 int IEEE1588Port::getTxTimestamp(PortIdentity * sourcePortIdentity,
-				 uint16_t sequenceId, Timestamp & timestamp,
+				 PTPMessageId messageId, Timestamp & timestamp,
 				 unsigned &counter_value, bool last)
 {
 	if (_hw_timestamper) {
 		return _hw_timestamper->HWTimestamper_txtimestamp
-		    (sourcePortIdentity, sequenceId, timestamp, counter_value,
+			(sourcePortIdentity, messageId, timestamp, counter_value,
 		     last);
 	}
 	timestamp = clock->getSystemTime();
@@ -1046,12 +1046,12 @@ int IEEE1588Port::getTxTimestamp(PortIdentity * sourcePortIdentity,
 }
 
 int IEEE1588Port::getRxTimestamp(PortIdentity * sourcePortIdentity,
-				 uint16_t sequenceId, Timestamp & timestamp,
+				 PTPMessageId messageId, Timestamp & timestamp,
 				 unsigned &counter_value, bool last)
 {
 	if (_hw_timestamper) {
 		return _hw_timestamper->HWTimestamper_rxtimestamp
-		    (sourcePortIdentity, sequenceId, timestamp, counter_value,
+		    (sourcePortIdentity, messageId, timestamp, counter_value,
 		     last);
 	}
 	timestamp = clock->getSystemTime();

@@ -396,10 +396,10 @@ class IEEE1588Port {
 	}
 
 	int getRxTimestamp
-	(PortIdentity * sourcePortIdentity, uint16_t sequenceId,
+	(PortIdentity * sourcePortIdentity, PTPMessageId messageId,
 	 Timestamp & timestamp, unsigned &counter_value, bool last);
 	int getTxTimestamp
-	(PortIdentity * sourcePortIdentity, uint16_t sequenceId,
+	(PortIdentity * sourcePortIdentity, PTPMessageId messageId,
 	 Timestamp & timestamp, unsigned &counter_value, bool last);
 
 	int getTxTimestamp

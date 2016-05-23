@@ -69,6 +69,7 @@ PTPMessageCommon *buildPTPMessage
 {
 	OSTimer *timer = port->getTimerFactory()->createTimer();
 	PTPMessageCommon *msg = NULL;
+	PTPMessageId messageId;
 	MessageType messageType;
 	unsigned char tspec_msg_t = 0;
 	unsigned char transportSpecific = 0;
@@ -112,6 +113,9 @@ PTPMessageCommon *buildPTPMessage
 		 sizeof(sequenceId));
 	sequenceId = PLAT_ntohs(sequenceId);
 
+	messageId.setMessageType(messageType);
+	messageId.setSequenceId(sequenceId);
+
 	XPTPD_INFO("Captured Sequence Id: %u", sequenceId);
 
 	if (!(messageType >> 3)) {
@@ -119,7 +123,7 @@ PTPMessageCommon *buildPTPMessage
 		long req = 4000;	// = 1 ms
 		int ts_good =
 		    port->getRxTimestamp
-			(sourcePortIdentity, sequenceId, timestamp, counter_value, false);
+			(sourcePortIdentity, messageId, timestamp, counter_value, false);
 		while (ts_good != 0 && iter-- != 0) {
 			// Waits at least 1 time slice regardless of size of 'req'
 			timer->sleep(req);
@@ -127,7 +131,7 @@ PTPMessageCommon *buildPTPMessage
 				XPTPD_PRINTF("Error (RX) timestamping RX event packet (Retrying), error=%d\n",
 					  ts_good );
 			ts_good =
-			    port->getRxTimestamp(sourcePortIdentity, sequenceId,
+			    port->getRxTimestamp(sourcePortIdentity, messageId,
 						 timestamp, counter_value,
 						 iter == 0);
 			req *= 2;

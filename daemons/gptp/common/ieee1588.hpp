@@ -54,6 +54,7 @@
 class LinkLayerAddress;
 struct ClockQuality;
 class PortIdentity;
+class PTPMessageId;
 class PTPMessageCommon;
 class PTPMessageSync;
 class PTPMessageAnnounce;
@@ -322,13 +323,13 @@ public:
 					   uint32_t * nominal_clock_rate) = 0;
 
 	virtual int HWTimestamper_txtimestamp(PortIdentity * identity,
-					      uint16_t sequenceId,
+					      PTPMessageId messageId,
 					      Timestamp & timestamp,
 					      unsigned &clock_value,
 					      bool last) = 0;
 
 	virtual int HWTimestamper_rxtimestamp(PortIdentity * identity,
-					      uint16_t sequenceId,
+					      PTPMessageId messageId,
 					      Timestamp & timestamp,
 					      unsigned &clock_value,
 					      bool last) = 0;
