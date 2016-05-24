@@ -47,7 +47,9 @@
 #define MRP_ENCODE_YES		0	/* must send */
 #define MRP_ENCODE_OPTIONAL	1	/* send if smaller */
 
+#ifndef MRP_CTL_UDS
 #define MRP_CTL_UDS 1 /* use unix domain sockets instead of UDP */
+#endif
 
 typedef struct mrp_applicant_attribute {
 	int mrp_state;
