@@ -65,42 +65,38 @@ static const char *version_str =
 
 int
 init_local_ctl( void ) {
-	struct sockaddr_in	addr;
+	struct sockaddr_un addr;
 	int sock_fd = -1;
 	int sock_flags;
+	int rc;
 
-	sock_fd = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
+	sock_fd = socket(AF_UNIX, SOCK_DGRAM, 0);
 	if (sock_fd < 0) goto out;
 	sock_flags = fcntl(sock_fd, F_GETFL, 0);
 	fcntl(sock_fd, F_SETFL, sock_flags | O_NONBLOCK);
 
 	memset(&addr, 0, sizeof(addr));
-	addr.sin_family = AF_INET;
-	addr.sin_port = htons(MRPD_PORT_DEFAULT);
-	inet_aton("127.0.0.1", &addr.sin_addr);
+	addr.sun_family = AF_UNIX;
+	strncpy(addr.sun_path, "/tmp/mrpctl.uds.sock", sizeof(addr.sun_path));
 
-	/* rc = bind(sock_fd, (struct sockaddr *)&addr, addr_len); */
-	
-	/* if (rc < 0) goto out; */
-
-	memset(&addr, 0, sizeof(addr));
-	/* 
-	 * use an abstract socket address with a leading null character 
-	 * note this is non-portable
-	 */
+	unlink(addr.sun_path);
+	rc = bind(sock_fd, (struct sockaddr*)&addr, sizeof(addr));
+	if (rc < 0)
+		goto out;
 
 printf("connected!\n");
 	control_socket = sock_fd;
 
 	return(0);
 out:
-	if (sock_fd != -1) close(sock_fd);
+	if (sock_fd != -1)
+		close(sock_fd);
 	sock_fd = -1;
 	return(-1);
 }
 
 int
-process_ctl_msg(char *buf, int buflen, struct sockaddr_in *client) {
+process_ctl_msg(char *buf, int buflen, struct sockaddr *client) {
 
 	/*
 	 * M?? - query MMRP Registrar MAC Address database
@@ -129,7 +125,7 @@ process_ctl_msg(char *buf, int buflen, struct sockaddr_in *client) {
 int
 recv_ctl_msg() {
 	char			*msgbuf;
-	struct sockaddr_in	client_addr;
+	struct sockaddr_un	client_addr;
 	struct msghdr		msg;
 	struct iovec		iov;
 	int			bytes = 0;
@@ -149,7 +145,7 @@ recv_ctl_msg() {
 	msg.msg_iovlen = 1;
 	bytes = recvmsg(control_socket, &msg, 0); 	if (bytes < 0) goto out;
 
-	return(process_ctl_msg(msgbuf, bytes, &client_addr) );
+	return process_ctl_msg(msgbuf, bytes, (struct sockaddr*)&client_addr);
 out:
 	//printf("recv'd bad msg ... \n");
 	free (msgbuf);
@@ -159,13 +155,12 @@ out:
 
 int
 send_control_msg( char *notify_data, int notify_len) {
-	struct sockaddr_in	addr;
+	struct sockaddr_un	addr;
 	socklen_t addr_len;
 
 	memset(&addr, 0, sizeof(addr));
-	addr.sin_family = AF_INET;
-	addr.sin_port = htons(MRPD_PORT_DEFAULT);
-	inet_aton("127.0.0.1", &addr.sin_addr);
+	addr.sun_family = AF_UNIX;
+	strncpy(addr.sun_path, MRPD_UDS_SOCK, sizeof(addr.sun_path));
 	addr_len = sizeof(addr);
 
 	//printf("sending message\n");

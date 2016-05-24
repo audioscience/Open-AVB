@@ -46,6 +46,7 @@ size_t mrpd_send(SOCKET sockfd, const void *buf, size_t len, int flags);
 #include <unistd.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
+#include <sys/un.h>
 #include <arpa/inet.h>
 typedef int SOCKET;
 typedef int HTIMER;
@@ -114,15 +115,17 @@ typedef struct mrpdu {
 
 #define MAX_FRAME_SIZE		2000
 #define MRPD_PORT_DEFAULT	7500
+#define MRPD_UDS_SOCK "/tmp/mrpd.uds.sock"
 #define MAX_MRPD_CMDSZ		(1500)
 
 /* forward declare */
 struct mrp_database;
+struct client_s;
 
 int mrpd_init_timers(struct mrp_database *mrp_db);
 int mrpd_timer_start(HTIMER timerfd, unsigned long value_ms);
 int mrpd_timer_stop(HTIMER timerfd);
-int mrpd_send_ctl_msg(struct sockaddr_in *client_addr, char *notify_data,
+int mrpd_send_ctl_msg(struct client_s *client_addr, char *notify_data,
 		      int notify_len);
 int mrpd_init_protocol_socket(uint16_t etype, SOCKET * sock,
 			      unsigned char *multicast_addr);

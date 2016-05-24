@@ -183,9 +183,18 @@ typedef struct mrpdu_vectorattrib {
 #define MRPDU_VECT_LVA(x)	(((x) & (7 << 13)) == (1 << 13))
 #define MRPDU_VECT_LVA_FLAG	(1 << 13)
 
+#define SOCKADDR_LEN(sockaddr_ptr) ((sockaddr_ptr)->sa_family == AF_INET ? \
+		sizeof(struct sockaddr_in) : sizeof(struct sockaddr_un))
+#define CLIENT_SOCKADDR_LEN(client_t_ptr) SOCKADDR_LEN(&(client_t_ptr)->addr.sa)
+
+
 typedef struct client_s {
 	struct client_s *next;
-	struct sockaddr_in client;
+	union {
+		struct sockaddr sa;
+		struct sockaddr_in in;
+		struct sockaddr_un un;
+	} addr;
 } client_t;
 
 struct mrp_database {
@@ -201,8 +210,8 @@ struct mrp_database {
 	int participant;
 };
 
-int mrp_client_add(client_t ** list, struct sockaddr_in *newclient);
-int mrp_client_delete(client_t ** list, struct sockaddr_in *newclient);
+int mrp_client_add(client_t ** list, struct sockaddr *newclient);
+int mrp_client_delete(client_t ** list, struct sockaddr *newclient);
 
 int mrp_init(void);
 char *mrp_event_string(int e);
