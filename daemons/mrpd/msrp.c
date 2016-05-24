@@ -3072,7 +3072,7 @@ int msrp_send_notifications(struct msrp_attribute *attrib, int notify)
 
 	client = MSRP_db->mrp_db.clients;
 	while (NULL != client) {
-		mrpd_send_ctl_msg(&(client->client), msgbuf, MAX_MRPD_CMDSZ);
+		mrpd_send_ctl_msg((struct sockaddr*)&(client->client), msgbuf, MAX_MRPD_CMDSZ);
 		client = client->next;
 	}
 
@@ -3085,7 +3085,7 @@ int msrp_send_notifications(struct msrp_attribute *attrib, int notify)
 	return 0;
 }
 
-int msrp_dumptable(struct sockaddr_in *client)
+int msrp_dumptable(struct sockaddr *client)
 {
 	char *msgbuf;
 	char *msgbuf_wrptr;
@@ -3453,7 +3453,7 @@ static int msrp_cmd_report_domain_status(struct msrpdu_domain *domain,
 	return 0;
 }
 
-int msrp_recv_cmd(char *buf, int buflen, struct sockaddr_in *client)
+int msrp_recv_cmd(char *buf, int buflen, struct sockaddr *client)
 {
 	int rc;
 	char respbuf[12];
@@ -3666,7 +3666,7 @@ int msrp_init(int msrp_enable)
 	return -1;
 }
 
-void msrp_bye(struct sockaddr_in *client)
+void msrp_bye(struct sockaddr *client)
 {
 	if (NULL != MSRP_db)
 		mrp_client_delete(&(MSRP_db->mrp_db.clients), client);

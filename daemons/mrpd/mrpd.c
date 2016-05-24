@@ -196,6 +196,38 @@ int mrp_periodictimer_stop()
 	return mrpd_timer_stop(periodic_timer);
 }
 
+#if MRP_CTL_UDS
+int init_local_ctl(void)
+{
+	struct sockaddr_un addr;
+	socklen_t addr_len;
+	int sock_fd = -1;
+	int rc;
+
+	sock_fd = socket(AF_UNIX, SOCK_DGRAM, 0);
+	if (sock_fd < 0)
+		goto out;
+
+	memset(&addr, 0, sizeof(addr));
+	addr.sun_family = AF_UNIX;
+	strncpy(addr.sun_path, MRPD_UDS_SOCK, sizeof(addr.sun_path));
+
+	unlink(addr.sun_path);
+	addr_len = sizeof(addr);
+	rc = bind(sock_fd, (struct sockaddr*)&addr, addr_len);
+	if (rc < 0)
+		goto out;
+
+	control_socket = sock_fd;
+
+	return 0;
+ out:
+	if (sock_fd != -1)
+		close(sock_fd);
+
+	return -1;
+}
+#else
 int init_local_ctl(void)
 {
 	struct sockaddr_in addr;
@@ -213,7 +245,7 @@ int init_local_ctl(void)
 	inet_aton("127.0.0.1", (struct in_addr *)&addr.sin_addr.s_addr);
 	addr_len = sizeof(addr);
 
-	rc = bind(sock_fd, (struct sockaddr *)&addr, addr_len);
+	rc = bind(sock_fd, (struct sockaddr_in*)&addr, addr_len);
 
 	if (rc < 0)
 		goto out;
@@ -227,9 +259,10 @@ int init_local_ctl(void)
 
 	return -1;
 }
+#endif
 
 int
-mrpd_send_ctl_msg(struct sockaddr_in *client_addr, char *notify_data,
+mrpd_send_ctl_msg(struct sockaddr *client_addr, char *notify_data,
 		  int notify_len)
 {
 
@@ -240,18 +273,18 @@ mrpd_send_ctl_msg(struct sockaddr_in *client_addr, char *notify_data,
 
 #if LOG_CLIENT_SEND
 	if (logging_enable) {
-		mrpd_log_printf("[%03d] CLT MSG %05d:%s",
-				gc_ctl_msg_count, client_addr->sin_port,
+		mrpd_log_printf("[%03d] CLT MSG :%s",
+				gc_ctl_msg_count,
 				notify_data);
 		gc_ctl_msg_count = (gc_ctl_msg_count + 1) % 1000;
 	}
 #endif
 	rc = sendto(control_socket, notify_data, notify_len,
-		    0, (struct sockaddr *)client_addr, sizeof(struct sockaddr));
+		    0, client_addr, SOCKADDR_LEN(client_addr));
 	return rc;
 }
 
-int process_ctl_msg(char *buf, int buflen, struct sockaddr_in *client)
+int process_ctl_msg(char *buf, int buflen, struct sockaddr *client)
 {
 
 	char respbuf[8];
@@ -309,7 +342,7 @@ int process_ctl_msg(char *buf, int buflen, struct sockaddr_in *client)
 
 #if LOG_CLIENT_RECV
 	if (logging_enable)
-		mrpd_log_printf("CMD:%s from CLNT %d\n", buf, client->sin_port);
+		mrpd_log_printf("CMD:%s from CLNT\n", buf);
 #endif
 
 	if (buflen < 3) {
@@ -347,7 +380,7 @@ int process_ctl_msg(char *buf, int buflen, struct sockaddr_in *client)
 int recv_ctl_msg()
 {
 	char *msgbuf;
-	struct sockaddr_in client_addr;
+	struct sockaddr client_addr;
 	struct msghdr msg;
 	struct iovec iov;
 	int bytes = 0;

@@ -47,6 +47,8 @@
 #define MRP_ENCODE_YES		0	/* must send */
 #define MRP_ENCODE_OPTIONAL	1	/* send if smaller */
 
+#define MRP_CTL_UDS 1 /* use unix domain sockets instead of UDP */
+
 typedef struct mrp_applicant_attribute {
 	int mrp_state;
 	int tx;			/* tx=1 means transmit on next TX event */
@@ -185,7 +187,16 @@ typedef struct mrpdu_vectorattrib {
 
 typedef struct client_s {
 	struct client_s *next;
+#if MRP_CTL_UDS
+
+#define SOCKADDR_LEN(sockaddr_ptr) (sockaddr_ptr->sa_family == AF_INET ? \
+		sizeof(struct sockaddr_in) : sizeof(struct sockaddr_un))
+	struct sockaddr_un client;
+#else
+
+#define SOCKADDR_LEN(sockaddr_ptr) (sizeof(struct sockaddr_in))
 	struct sockaddr_in client;
+#endif
 } client_t;
 
 struct mrp_database {
@@ -201,8 +212,8 @@ struct mrp_database {
 	int participant;
 };
 
-int mrp_client_add(client_t ** list, struct sockaddr_in *newclient);
-int mrp_client_delete(client_t ** list, struct sockaddr_in *newclient);
+int mrp_client_add(client_t ** list, struct sockaddr *newclient);
+int mrp_client_delete(client_t ** list, struct sockaddr *newclient);
 
 int mrp_init(void);
 char *mrp_event_string(int e);

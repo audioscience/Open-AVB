@@ -230,7 +230,7 @@ char *mrp_print_status(const mrp_applicant_attribute_t * app,
 
 #endif
 
-static int client_lookup(client_t * list, struct sockaddr_in *newclient)
+static int client_lookup(client_t * list, struct sockaddr *newclient)
 {
 	client_t *client_item;
 
@@ -240,14 +240,21 @@ static int client_lookup(client_t * list, struct sockaddr_in *newclient)
 		return 0;
 
 	while (NULL != client_item) {
-		if (client_item->client.sin_port == newclient->sin_port)
+#if MRP_CTL_UDS
+		struct sockaddr_un *this = &client_item->client;
+		struct sockaddr_un *new = (struct sockaddr_un*)newclient;
+		if (!memcmp(this->sun_path, new->sun_path, sizeof(new->sun_path)))
 			return 1;
+#else
+		if (client_item->client.sin_port == ((struct sockaddr_in*)newclient)->sin_port)
+			return 1;
+#endif
 		client_item = client_item->next;
 	}
 	return 0;
 }
 
-int mrp_client_add(client_t ** list, struct sockaddr_in *newclient)
+int mrp_client_add(client_t ** list, struct sockaddr *newclient)
 {
 	client_t *client_item;
 
@@ -265,7 +272,7 @@ int mrp_client_add(client_t ** list, struct sockaddr_in *newclient)
 		if (NULL == client_item)
 			return -1;
 		client_item->next = NULL;
-		client_item->client = *newclient;
+		memcpy(&client_item->client, newclient, sizeof(client_item->client));
 		*list = client_item;
 		return 0;
 	}
@@ -277,7 +284,7 @@ int mrp_client_add(client_t ** list, struct sockaddr_in *newclient)
 				return -1;
 			client_item = client_item->next;
 			client_item->next = NULL;
-			client_item->client = *newclient;
+			memcpy(&client_item->client, newclient, sizeof(client_item->client));
 			return 0;
 		}
 		client_item = client_item->next;
@@ -285,7 +292,7 @@ int mrp_client_add(client_t ** list, struct sockaddr_in *newclient)
 	return -1;
 }
 
-int mrp_client_delete(client_t ** list, struct sockaddr_in *newclient)
+int mrp_client_delete(client_t ** list, struct sockaddr *newclient)
 {
 	client_t *client_item;
 	client_t *client_last;
@@ -302,7 +309,7 @@ int mrp_client_delete(client_t ** list, struct sockaddr_in *newclient)
 	while (NULL != client_item) {
 		if (0 == memcmp((uint8_t *) newclient,
 				(uint8_t *) & client_item->client,
-				sizeof(struct sockaddr_in))) {
+				sizeof(client_item->client))) {
 
 			if (client_last) {
 				client_last->next = client_item->next;

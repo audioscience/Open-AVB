@@ -1457,7 +1457,7 @@ int mmrp_send_notifications(struct mmrp_attribute *attrib, int notify)
 
 	client = MMRP_db->mrp_db.clients;
 	while (NULL != client) {
-		mrpd_send_ctl_msg(&(client->client), msgbuf, MAX_MRPD_CMDSZ);
+		mrpd_send_ctl_msg((struct sockaddr*)&(client->client), msgbuf, MAX_MRPD_CMDSZ);
 		client = client->next;
 	}
 
@@ -1470,7 +1470,7 @@ int mmrp_send_notifications(struct mmrp_attribute *attrib, int notify)
 	return 0;
 }
 
-int mmrp_dumptable(struct sockaddr_in *client)
+int mmrp_dumptable(struct sockaddr *client)
 {
 	char *msgbuf;
 	char *msgbuf_wrptr;
@@ -1602,7 +1602,7 @@ int mmrp_cmd_service(uint8_t service, int mrp_event)
 	return 0;
 }
 
-int mmrp_recv_cmd(char *buf, int buflen, struct sockaddr_in *client)
+int mmrp_recv_cmd(char *buf, int buflen, struct sockaddr *client)
 {
 	int rc;
 	int err_index;
@@ -1790,7 +1790,7 @@ int mmrp_reclaim(void)
 	return 0;
 }
 
-void mmrp_bye(struct sockaddr_in *client)
+void mmrp_bye(struct sockaddr *client)
 {
 	if (NULL != MMRP_db)
 		mrp_client_delete(&(MMRP_db->mrp_db.clients), client);

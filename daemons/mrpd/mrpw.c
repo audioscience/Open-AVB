@@ -481,7 +481,7 @@ int init_timers(void)
 
 //sockaddr
 
-int process_ctl_msg(char *buf, int buflen, struct sockaddr_in *client)
+int process_ctl_msg(char *buf, int buflen, struct sockaddr *client)
 {
 
 	char respbuf[8];
@@ -539,7 +539,7 @@ int process_ctl_msg(char *buf, int buflen, struct sockaddr_in *client)
 
 #if LOG_CLIENT_RECV
 	if (logging_enable)
-		printf("CMD:%s from CLNT %d\n", buf, client->sin_port);
+		printf("CMD:%s from CLNT %d\n", buf, ((struct sockaddr_in*)client)->sin_port);
 #endif
 
 	if (buflen < 3) {
@@ -588,7 +588,7 @@ int mrpd_recvmsgbuf(SOCKET sock, char **buf)
 	return last_pdu_buffer_size;
 }
 
-int mrpd_send_ctl_msg(struct sockaddr_in *client_addr,
+int mrpd_send_ctl_msg(struct sockaddr *client_addr,
 		      char *notify_data, int notify_len)
 {
 
@@ -598,10 +598,10 @@ int mrpd_send_ctl_msg(struct sockaddr_in *client_addr,
 		return 0;
 
 #if LOG_CLIENT_SEND
-	printf("CTL MSG:%s to CLNT %d\n", notify_data, client_addr->sin_port);
+	printf("CTL MSG:%s to CLNT %d\n", notify_data, ((struct sockaddr_in*)client_addr)->sin_port);
 #endif
 	rc = sendto(control_socket, notify_data, notify_len,
-		    0, (struct sockaddr *)client_addr, sizeof(struct sockaddr));
+		    0, client_addr, SOCKADDR_LEN(client_addr));
 	return rc;
 }
 
@@ -885,7 +885,7 @@ int mrpw_run_once(void)
 	case WAIT_OBJECT_0 + pkt_event_localhost:
 		que_pop_nowait(que_localhost, &localhost_pkt);
 		process_ctl_msg(localhost_pkt.msgbuf,
-				localhost_pkt.bytes, (struct sockaddr_in *)
+				localhost_pkt.bytes, (struct sockaddr*)
 				&localhost_pkt.client_addr);
 		if (mrpd_timer_timeout(&timer_check_tick)) {
 			if (!SetEvent(pkt_events[loop_time_tick])) {
