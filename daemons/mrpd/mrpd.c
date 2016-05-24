@@ -273,9 +273,17 @@ mrpd_send_ctl_msg(struct sockaddr *client_addr, char *notify_data,
 
 #if LOG_CLIENT_SEND
 	if (logging_enable) {
-		mrpd_log_printf("[%03d] CLT MSG :%s",
-				gc_ctl_msg_count,
-				notify_data);
+#if MRP_CTL_UDS
+		mrpd_log_printf("[%03d] CLT MSG %s:%s",
+			gc_ctl_msg_count,
+			((struct sockaddr_un *)client_addr)->sun_path,
+			notify_data);
+#else
+		mrpd_log_printf("[%03d] CLT MSG %05d:%s",
+			gc_ctl_msg_count,
+			((struct sockaddr_in *)client_addr)->sin_port,
+			notify_data);
+#endif /* MRP_CTL_UDS */
 		gc_ctl_msg_count = (gc_ctl_msg_count + 1) % 1000;
 	}
 #endif
@@ -341,8 +349,17 @@ int process_ctl_msg(char *buf, int buflen, struct sockaddr *client)
 	memset(respbuf, 0, sizeof(respbuf));
 
 #if LOG_CLIENT_RECV
-	if (logging_enable)
-		mrpd_log_printf("CMD:%s from CLNT\n", buf);
+	if (logging_enable) {
+#if MRP_CTL_UDS
+		mrpd_log_printf("CMD:%s from CLNT %s\n",
+			buf,
+			((struct sockaddr_un *)client)->sun_path);
+#else
+		mrpd_log_printf("CMD:%s from CLNT %d\n",
+			buf,
+			((struct sockaddr_in *)client)->sin_port);
+#endif /* MRP_CTL_UDS */
+	}
 #endif
 
 	if (buflen < 3) {
@@ -380,7 +397,11 @@ int process_ctl_msg(char *buf, int buflen, struct sockaddr *client)
 int recv_ctl_msg()
 {
 	char *msgbuf;
-	struct sockaddr client_addr;
+#if MRP_CTL_UDS
+	struct sockaddr_un client_addr;
+#else
+	struct sockaddr_in client_addr;
+#endif
 	struct msghdr msg;
 	struct iovec iov;
 	int bytes = 0;
@@ -404,7 +425,7 @@ int recv_ctl_msg()
 	if (bytes <= 0)
 		goto out;
 
-	process_ctl_msg(msgbuf, bytes, &client_addr);
+	process_ctl_msg(msgbuf, bytes, (struct sockaddr*)&client_addr);
  out:
 	free(msgbuf);
 
