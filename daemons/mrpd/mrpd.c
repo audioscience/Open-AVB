@@ -784,6 +784,9 @@ void process_events(void)
 		if (-1 == rc) {
 			return;	/* exit on error */
 		} else if (0 == rc) {
+#if LOG_POLL_EVENTS
+			mrpd_log_printf("== EVENT select timeout ==\n");
+#endif
 			/* select() timed out, process pending control messages if any */
 			mrpd_process_ctl_msg_queue(&ctl_msg_queue);
 		} else {
@@ -893,10 +896,11 @@ void process_events(void)
 			if (FD_ISSET(gc_timer, &sel_fds)) {
 				mrpd_reclaim();
 			}
+
+		}
 #if LOG_POLL_EVENTS
 		mrpd_log_printf("== EVENT DONE ==\n");
 #endif
-		}
 	} while (1);
 }
 
