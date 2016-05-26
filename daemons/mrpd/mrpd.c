@@ -1058,18 +1058,30 @@ static void mrpd_log_timer_event(char *src, int event)
 
 void mrpd_log_printf(const char *fmt, ...)
 {
+#if LOG_TIMESTAMP
 	struct timeval tv;
 	char sz[512];
+#endif
 
 	if (logging_enable) {
+#if LOG_TIMESTAMP
 		gettimeofday(&tv, NULL);
+#endif
 		va_list arglist;
 		va_start(arglist, fmt);
+
+#if LOG_TIMESTAMP
 		vsnprintf(sz, 512, fmt, arglist);
 		printf("MRPD %03d.%06d %s",
 		       (int)(tv.tv_sec % 1000), (int)tv.tv_usec, sz);
 		if (strstr(sz, ":ERP"))
 			printf("\n");
+#else
+		vprintf(fmt, arglist);
+		if (strstr(fmt, ":ERP"))
+			printf("\n");
+#endif
+
 		va_end(arglist);
 	}
 }
