@@ -306,13 +306,19 @@ mrpd_process_ctl_msg_queue(struct pend_ctl_msg_queue *ctl_msg_queue)
 			/* sending would block, retry later */
 #ifdef LOG_CLIENT_SEND
 			if (logging_enable)
-				mrpd_log_printf("BLOCKED sendto()\n");
+				mrpd_log_printf("BLOCKED sendto(pending = %d)\n", ctl_msg_queue->msg_count);
 #endif
 			rc = 0;
 			break;
 		} else if (rc < 0) {
 			/* TODO: log dropped */
 		}
+
+#ifdef LOG_CLIENT_SEND
+		if (logging_enable)
+			mrpd_log_printf("DEQ MSG [%d] %s\n", ctl_msg_queue->msg_count, ctl_msg->payload);
+#endif
+
 		ctl_msg_queue->tail = ctl_msg->prev;
 		if (!ctl_msg->prev)
 			ctl_msg_queue->head = NULL;
@@ -354,13 +360,13 @@ mrpd_send_ctl_msg(struct sockaddr *client_addr, char *notify_data,
 #if LOG_CLIENT_SEND
 	if (logging_enable) {
 #if MRP_CTL_UDS
-		mrpd_log_printf("[%03d] CLT MSG %s:%s\n",
-			gc_ctl_msg_count,
+		mrpd_log_printf("[%03d.%03d] CLT MSG %s:%s\n",
+			gc_ctl_msg_count, ctl_msg_queue.msg_count,
 			((struct sockaddr_un *)client_addr)->sun_path,
 			notify_data);
 #else
-		mrpd_log_printf("[%03d] CLT MSG %05d:%s\n",
-			gc_ctl_msg_count,
+		mrpd_log_printf("[%03d.%03d] CLT MSG %05d:%s\n",
+			gc_ctl_msg_count, ctl_msg_queue.msg_count,
 			((struct sockaddr_in *)client_addr)->sin_port,
 			notify_data);
 #endif /* MRP_CTL_UDS */
