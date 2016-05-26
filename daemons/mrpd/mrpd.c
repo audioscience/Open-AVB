@@ -112,6 +112,19 @@ extern struct mmrp_database *MMRP_db;
 extern struct mvrp_database *MVRP_db;
 extern struct msrp_database *MSRP_db;
 
+struct pend_ctl_msg {
+	struct pend_ctl_msg *next, *prev;
+	struct client_s client;
+	size_t payload_sz;
+	char payload[1];
+};
+
+static struct pend_ctl_msg_queue {
+	struct pend_ctl_msg *head;
+	struct pend_ctl_msg *tail;
+	size_t msg_count;
+} ctl_msg_queue = {NULL, NULL, 0};
+
 int mrpd_timer_create(void)
 {
 	int t = timerfd_create(CLOCK_MONOTONIC, 0);
@@ -262,24 +275,87 @@ int init_local_ctl(void)
 #endif
 
 int
+mrpd_process_ctl_msg_queue(struct pend_ctl_msg_queue *ctl_msg_queue)
+{
+
+	int rc = 0;
+
+	if (!ctl_msg_queue->msg_count)
+		return 0;
+
+	/* invalid control socket free messages in the queue */
+	if (-1 == control_socket) {
+		while (ctl_msg_queue->head) {
+			struct pend_ctl_msg *item = ctl_msg_queue->head;
+			ctl_msg_queue->head = ctl_msg_queue->head->next;
+			free(item);
+		}
+		ctl_msg_queue->tail = NULL;
+		ctl_msg_queue->msg_count = 0;
+		return 0;
+	}
+
+
+	while (ctl_msg_queue->tail) {
+		struct pend_ctl_msg *ctl_msg = ctl_msg_queue->tail;
+		/* TODO: age ctl_msg */
+		rc = sendto(control_socket, ctl_msg->payload, ctl_msg->payload_sz,
+			MSG_DONTWAIT, (struct sockaddr*)&ctl_msg->client.client,
+			sizeof(ctl_msg->client.client));
+		if (rc < 0 && (errno == EAGAIN || errno == EWOULDBLOCK)) {
+			/* sending would block, retry later */
+			rc = 0;
+			break;
+		} else if (rc < 0) {
+			/* TODO: log dropped */
+		}
+		ctl_msg_queue->tail = ctl_msg->prev;
+		if (!ctl_msg->prev)
+			ctl_msg_queue->head = NULL;
+		if (ctl_msg_queue->tail)
+			ctl_msg_queue->tail->next = NULL;
+		ctl_msg_queue->msg_count--;
+		free(ctl_msg);
+	}
+
+	return rc;
+}
+
+int
 mrpd_send_ctl_msg(struct sockaddr *client_addr, char *notify_data,
 		  int notify_len)
 {
-
-	int rc;
-
 	if (-1 == control_socket)
 		return 0;
+
+	struct pend_ctl_msg *item = malloc(sizeof(struct pend_ctl_msg)+notify_len);
+	if (!item)
+		return -1;
+
+	memcpy(&item->client.client, client_addr, SOCKADDR_LEN(client_addr));
+	memcpy(item->payload, notify_data, notify_len);
+	item->payload_sz = notify_len;
+	item->next = NULL;
+	item->prev = NULL;
+
+	/* add message to queue */
+	item->next = ctl_msg_queue.head;
+	if (ctl_msg_queue.head)
+		ctl_msg_queue.head->prev = item;
+	ctl_msg_queue.head = item;
+	if (!ctl_msg_queue.tail)
+		ctl_msg_queue.tail = item;
+	ctl_msg_queue.msg_count++;
 
 #if LOG_CLIENT_SEND
 	if (logging_enable) {
 #if MRP_CTL_UDS
-		mrpd_log_printf("[%03d] CLT MSG %s:%s",
+		mrpd_log_printf("[%03d] CLT MSG %s:%s\n",
 			gc_ctl_msg_count,
 			((struct sockaddr_un *)client_addr)->sun_path,
 			notify_data);
 #else
-		mrpd_log_printf("[%03d] CLT MSG %05d:%s",
+		mrpd_log_printf("[%03d] CLT MSG %05d:%s\n",
 			gc_ctl_msg_count,
 			((struct sockaddr_in *)client_addr)->sin_port,
 			notify_data);
@@ -287,9 +363,8 @@ mrpd_send_ctl_msg(struct sockaddr *client_addr, char *notify_data,
 		gc_ctl_msg_count = (gc_ctl_msg_count + 1) % 1000;
 	}
 #endif
-	rc = sendto(control_socket, notify_data, notify_len,
-		    0, client_addr, SOCKADDR_LEN(client_addr));
-	return rc;
+
+	return mrpd_process_ctl_msg_queue(&ctl_msg_queue);
 }
 
 int process_ctl_msg(char *buf, int buflen, struct sockaddr *client)
@@ -689,13 +764,19 @@ void process_events(void)
 		max_fd = gc_timer;
 
 	do {
+		struct timeval to = {0, 10000 /* 10000 us */};
 
 		sel_fds = fds;
-		rc = select(max_fd + 1, &sel_fds, NULL, NULL, NULL);
+		/* timeout instead of waiting forever if there are pending messages */
+		rc = select(max_fd + 1, &sel_fds, NULL, NULL,
+			ctl_msg_queue.msg_count ? &to : NULL);
 
-		if (-1 == rc)
+		if (-1 == rc) {
 			return;	/* exit on error */
-		else {
+		} else if (0 == rc) {
+			/* select() timed out, process pending control messages if any */
+			mrpd_process_ctl_msg_queue(&ctl_msg_queue);
+		} else {
 			if (FD_ISSET(control_socket, &sel_fds)) {
 #if LOG_POLL_EVENTS
 				mrpd_log_printf("== EVENT recv_ctl_msg ==\n");
