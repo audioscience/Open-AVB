@@ -304,6 +304,10 @@ mrpd_process_ctl_msg_queue(struct pend_ctl_msg_queue *ctl_msg_queue)
 			sizeof(ctl_msg->client.client));
 		if (rc < 0 && (errno == EAGAIN || errno == EWOULDBLOCK)) {
 			/* sending would block, retry later */
+#ifdef LOG_CLIENT_SEND
+			if (logging_enable)
+				mrpd_log_printf("BLOCKED sendto()\n");
+#endif
 			rc = 0;
 			break;
 		} else if (rc < 0) {
