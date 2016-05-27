@@ -436,7 +436,7 @@ void IEEE1588Port::processEvent(Event e)
 
 		break;
 	case STATE_CHANGE_EVENT:
-		if ( clock->getPriority1() != 255 ) {
+		if ( clock->getPriority1() != 255 && qualified_announce != NULL ) {
 			int number_ports, j;
 			PTPMessageAnnounce *EBest = NULL;
 			char EBestClockIdentity[PTP_CLOCK_IDENTITY_LENGTH];
