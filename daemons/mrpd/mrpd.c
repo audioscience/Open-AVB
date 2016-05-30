@@ -899,7 +899,7 @@ void usage(void)
 {
 	fprintf(stderr,
 		"\n"
-		"usage: mrpd [-hdlmvsp] [-u [path/to/socket]] -i interface-name"
+		"usage: mrpd [-hdlmvsp] [-u] -i interface-name"
 		"\n"
 		"options:\n"
 		"    -h  show this message\n"
