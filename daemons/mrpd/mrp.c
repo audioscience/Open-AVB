@@ -230,40 +230,33 @@ char *mrp_print_status(const mrp_applicant_attribute_t * app,
 
 #endif
 
-static int client_lookup(client_t * list, struct sockaddr *newclient)
+static int client_lookup(client_t * list, struct sockaddr *newclient_addr)
 {
 	client_t *client_item;
 
 	client_item = list;
 
-	if (NULL == newclient)
+	if (NULL == newclient_addr)
 		return 0;
 
 	while (NULL != client_item) {
-#if MRP_CTL_UDS
-		struct sockaddr_un *this = &client_item->client;
-		struct sockaddr_un *new = (struct sockaddr_un*)newclient;
-		if (!memcmp(this->sun_path, new->sun_path, sizeof(new->sun_path)))
+		if (!memcmp(&client_item->addr, newclient_addr, CLIENT_SOCKADDR_LEN(client_item)))
 			return 1;
-#else
-		if (client_item->client.sin_port == ((struct sockaddr_in*)newclient)->sin_port)
-			return 1;
-#endif
 		client_item = client_item->next;
 	}
 	return 0;
 }
 
-int mrp_client_add(client_t ** list, struct sockaddr *newclient)
+int mrp_client_add(client_t ** list, struct sockaddr *newclient_addr)
 {
 	client_t *client_item;
 
 	client_item = *list;
 
-	if (NULL == newclient)
+	if (NULL == newclient_addr)
 		return -1;
 
-	if (client_lookup(client_item, newclient))
+	if (client_lookup(client_item, newclient_addr))
 		return 0;	/* already present */
 
 	/* handle 1st entry into list */
@@ -272,7 +265,7 @@ int mrp_client_add(client_t ** list, struct sockaddr *newclient)
 		if (NULL == client_item)
 			return -1;
 		client_item->next = NULL;
-		memcpy(&client_item->client, newclient, sizeof(client_item->client));
+		memcpy(&client_item->addr, newclient_addr, SOCKADDR_LEN(newclient_addr));
 		*list = client_item;
 		return 0;
 	}
@@ -284,7 +277,7 @@ int mrp_client_add(client_t ** list, struct sockaddr *newclient)
 				return -1;
 			client_item = client_item->next;
 			client_item->next = NULL;
-			memcpy(&client_item->client, newclient, sizeof(client_item->client));
+			memcpy(&client_item->addr, newclient_addr, SOCKADDR_LEN(newclient_addr));
 			return 0;
 		}
 		client_item = client_item->next;
@@ -292,7 +285,7 @@ int mrp_client_add(client_t ** list, struct sockaddr *newclient)
 	return -1;
 }
 
-int mrp_client_delete(client_t ** list, struct sockaddr *newclient)
+int mrp_client_delete(client_t ** list, struct sockaddr *newclient_addr)
 {
 	client_t *client_item;
 	client_t *client_last;
@@ -300,16 +293,16 @@ int mrp_client_delete(client_t ** list, struct sockaddr *newclient)
 	client_item = *list;
 	client_last = NULL;
 
-	if (NULL == newclient)
+	if (NULL == newclient_addr)
 		return 0;
 
 	if (NULL == client_item)
 		return 0;
 
 	while (NULL != client_item) {
-		if (0 == memcmp((uint8_t *) newclient,
-				(uint8_t *) & client_item->client,
-				sizeof(client_item->client))) {
+		if (0 == memcmp((uint8_t *) newclient_addr,
+				(uint8_t *) & client_item->addr,
+				CLIENT_SOCKADDR_LEN(client_item))) {
 
 			if (client_last) {
 				client_last->next = client_item->next;

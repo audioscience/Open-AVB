@@ -48,10 +48,6 @@
 #define MRP_ENCODE_YES		0	/* must send */
 #define MRP_ENCODE_OPTIONAL	1	/* send if smaller */
 
-#ifndef MRP_CTL_UDS
-#define MRP_CTL_UDS 1 /* use unix domain sockets instead of UDP */
-#endif
-
 typedef struct mrp_applicant_attribute {
 	int mrp_state;
 	int tx;			/* tx=1 means transmit on next TX event */
@@ -188,18 +184,18 @@ typedef struct mrpdu_vectorattrib {
 #define MRPDU_VECT_LVA(x)	(((x) & (7 << 13)) == (1 << 13))
 #define MRPDU_VECT_LVA_FLAG	(1 << 13)
 
+#define SOCKADDR_LEN(sockaddr_ptr) ((sockaddr_ptr)->sa_family == AF_INET ? \
+		sizeof(struct sockaddr_in) : sizeof(struct sockaddr_un))
+#define CLIENT_SOCKADDR_LEN(client_t_ptr) SOCKADDR_LEN(&(client_t_ptr)->addr.sa)
+
+
 typedef struct client_s {
 	struct client_s *next;
-#if MRP_CTL_UDS
-
-#define SOCKADDR_LEN(sockaddr_ptr) (sockaddr_ptr->sa_family == AF_INET ? \
-		sizeof(struct sockaddr_in) : sizeof(struct sockaddr_un))
-	struct sockaddr_un client;
-#else
-
-#define SOCKADDR_LEN(sockaddr_ptr) (sizeof(struct sockaddr_in))
-	struct sockaddr_in client;
-#endif
+	union {
+		struct sockaddr sa;
+		struct sockaddr_in in;
+		struct sockaddr_un un;
+	} addr;
 } client_t;
 
 struct mrp_database {

@@ -163,8 +163,8 @@ struct msrp_database {
 
 int msrp_init(int msrp_enable);
 int msrp_event(int event, struct msrp_attribute *rattrib);
-int msrp_recv_cmd(char *buf, int buflen, struct sockaddr *client);
+int msrp_recv_cmd(char *buf, int buflen, struct client_s *client);
 int msrp_send_notifications(struct msrp_attribute *attrib, int notify);
 int msrp_reclaim(void);
-void msrp_bye(struct sockaddr *client);
+void msrp_bye(struct client_s *client);
 int msrp_recv_msg(void);

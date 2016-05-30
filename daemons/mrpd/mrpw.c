@@ -481,7 +481,7 @@ int init_timers(void)
 
 //sockaddr
 
-int process_ctl_msg(char *buf, int buflen, struct sockaddr *client)
+int process_ctl_msg(char *buf, int buflen, struct client_s *client)
 {
 
 	char respbuf[8];
@@ -539,7 +539,7 @@ int process_ctl_msg(char *buf, int buflen, struct sockaddr *client)
 
 #if LOG_CLIENT_RECV
 	if (logging_enable)
-		printf("CMD:%s from CLNT %d\n", buf, ((struct sockaddr_in*)client)->sin_port);
+		printf("CMD:%s from CLNT %d\n", buf, client->addr.in.sin_port);
 #endif
 
 	if (buflen < 3) {
@@ -588,7 +588,7 @@ int mrpd_recvmsgbuf(SOCKET sock, char **buf)
 	return last_pdu_buffer_size;
 }
 
-int mrpd_send_ctl_msg(struct sockaddr *client_addr,
+int mrpd_send_ctl_msg(struct client_s *client,
 		      char *notify_data, int notify_len)
 {
 
@@ -598,10 +598,10 @@ int mrpd_send_ctl_msg(struct sockaddr *client_addr,
 		return 0;
 
 #if LOG_CLIENT_SEND
-	printf("CTL MSG:%s to CLNT %d\n", notify_data, ((struct sockaddr_in*)client_addr)->sin_port);
+	printf("CTL MSG:%s to CLNT %d\n", notify_data, client->addr.in.sin_port);
 #endif
 	rc = sendto(control_socket, notify_data, notify_len,
-		    0, client_addr, SOCKADDR_LEN(client_addr));
+		    0, &client->addr.sa, CLINT_SOCKADDR_LEN(client));
 	return rc;
 }
 
@@ -671,7 +671,7 @@ int init_local_ctl(void)
 
 struct ctl_thread_params {
 	char *msgbuf;
-	struct sockaddr client_addr;
+	struct client_s client;
 	int bytes;
 };
 
@@ -681,11 +681,11 @@ DWORD WINAPI ctl_thread(LPVOID lpParam)
 	int client_len;
 
 	while (WaitForSingleObject(sem_kill_localhost_thread, 0)) {
-		client_len = sizeof(struct sockaddr);
+		client_len = sizeof(client.addr);
 		s.msgbuf = (char *)malloc(MAX_MRPD_CMDSZ);
 		s.bytes =
 		    recvfrom(control_socket, s.msgbuf, MAX_MRPD_CMDSZ, 0,
-			     &s.client_addr, &client_len);
+			     &s.client.addr, &client_len);
 		if (s.bytes > 0) {
 			que_push(que_localhost, &s);
 		} else {
@@ -885,8 +885,8 @@ int mrpw_run_once(void)
 	case WAIT_OBJECT_0 + pkt_event_localhost:
 		que_pop_nowait(que_localhost, &localhost_pkt);
 		process_ctl_msg(localhost_pkt.msgbuf,
-				localhost_pkt.bytes, (struct sockaddr*)
-				&localhost_pkt.client_addr);
+				localhost_pkt.bytes,
+				&localhost_pkt.client);
 		if (mrpd_timer_timeout(&timer_check_tick)) {
 			if (!SetEvent(pkt_events[loop_time_tick])) {
 				printf("SetEvent loop_time_tick failed (%d)\n",

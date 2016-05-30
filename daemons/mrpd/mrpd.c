@@ -210,8 +210,7 @@ int mrp_periodictimer_stop()
 	return mrpd_timer_stop(periodic_timer);
 }
 
-#if MRP_CTL_UDS
-int init_local_ctl(void)
+int init_local_uds_ctl(void)
 {
 	struct sockaddr_un addr;
 	socklen_t addr_len;
@@ -241,8 +240,8 @@ int init_local_ctl(void)
 
 	return -1;
 }
-#else
-int init_local_ctl(void)
+
+int init_local_udp_ctl(void)
 {
 	struct sockaddr_in addr;
 	socklen_t addr_len;
@@ -273,7 +272,6 @@ int init_local_ctl(void)
 
 	return -1;
 }
-#endif
 
 int
 mrpd_process_ctl_msg_queue(struct pend_ctl_msg_queue *ctl_msg_queue)
@@ -301,8 +299,8 @@ mrpd_process_ctl_msg_queue(struct pend_ctl_msg_queue *ctl_msg_queue)
 		struct pend_ctl_msg *ctl_msg = ctl_msg_queue->tail;
 		/* TODO: age ctl_msg */
 		rc = sendto(control_socket, ctl_msg->payload, ctl_msg->payload_sz,
-			MSG_DONTWAIT, (struct sockaddr*)&ctl_msg->client.client,
-			sizeof(ctl_msg->client.client));
+			MSG_DONTWAIT, &ctl_msg->client.addr.sa,
+			CLIENT_SOCKADDR_LEN(&ctl_msg->client));
 		if (rc < 0 && (errno == EAGAIN || errno == EWOULDBLOCK)) {
 			/* sending would block, retry later */
 #ifdef LOG_CLIENT_SEND
@@ -333,7 +331,7 @@ mrpd_process_ctl_msg_queue(struct pend_ctl_msg_queue *ctl_msg_queue)
 }
 
 int
-mrpd_send_ctl_msg(struct sockaddr *client_addr, char *notify_data,
+mrpd_send_ctl_msg(struct client_s *client, char *notify_data,
 		  int notify_len)
 {
 	if (-1 == control_socket)
@@ -343,7 +341,7 @@ mrpd_send_ctl_msg(struct sockaddr *client_addr, char *notify_data,
 	if (!item)
 		return -1;
 
-	memcpy(&item->client.client, client_addr, SOCKADDR_LEN(client_addr));
+	item->client = *client;
 	memcpy(item->payload, notify_data, notify_len);
 	item->payload_sz = notify_len;
 	item->next = NULL;
@@ -360,17 +358,21 @@ mrpd_send_ctl_msg(struct sockaddr *client_addr, char *notify_data,
 
 #if LOG_CLIENT_SEND
 	if (logging_enable) {
-#if MRP_CTL_UDS
-		mrpd_log_printf("[%03d.%03d] CLT MSG %s:%s\n",
-			gc_ctl_msg_count, ctl_msg_queue.msg_count,
-			((struct sockaddr_un *)client_addr)->sun_path,
-			notify_data);
-#else
-		mrpd_log_printf("[%03d.%03d] CLT MSG %05d:%s\n",
-			gc_ctl_msg_count, ctl_msg_queue.msg_count,
-			((struct sockaddr_in *)client_addr)->sin_port,
-			notify_data);
-#endif /* MRP_CTL_UDS */
+		if (client->addr.sa.sa_family == AF_INET) {
+			mrpd_log_printf("[%03d] CLT MSG %05d:%s\n",
+				gc_ctl_msg_count,
+				client->addr.in.sin_port,
+				notify_data);
+		} else if (client->addr.sa.sa_family == AF_UNIX) {
+			mrpd_log_printf("[%03d] CLT MSG %s:%s\n",
+				gc_ctl_msg_count,
+				client->addr.un.sun_path,
+				notify_data);
+		} else {
+			mrpd_log_printf("[%03d] CLT MSG UNKNOWN AF:%s\n",
+				gc_ctl_msg_count,
+				notify_data);
+		}
 		gc_ctl_msg_count = (gc_ctl_msg_count + 1) % 1000;
 	}
 #endif
@@ -378,7 +380,7 @@ mrpd_send_ctl_msg(struct sockaddr *client_addr, char *notify_data,
 	return 0;
 }
 
-int process_ctl_msg(char *buf, int buflen, struct sockaddr *client)
+int process_ctl_msg(char *buf, int buflen, struct client_s *client)
 {
 
 	char respbuf[8];
@@ -436,15 +438,15 @@ int process_ctl_msg(char *buf, int buflen, struct sockaddr *client)
 
 #if LOG_CLIENT_RECV
 	if (logging_enable) {
-#if MRP_CTL_UDS
-		mrpd_log_printf("CMD:%s from CLNT %s\n",
-			buf,
-			((struct sockaddr_un *)client)->sun_path);
-#else
-		mrpd_log_printf("CMD:%s from CLNT %d\n",
-			buf,
-			((struct sockaddr_in *)client)->sin_port);
-#endif /* MRP_CTL_UDS */
+		if (client->addr.sa.sa_family == AF_INET) {
+			mrpd_log_printf("CMD:%s from CLNT %d\n", buf,
+				client->addr.in.sin_port);
+		} else if (client->addr.sa.sa_family == AF_UNIX) {
+			mrpd_log_printf("CMD:%s from CLNT %s\n", buf,
+				client->addr.un.sun_path);
+		} else {
+			mrpd_log_printf("CMD:%s from CLNT UNKNOWN AF\n", buf);
+		}
 	}
 #endif
 
@@ -483,11 +485,7 @@ int process_ctl_msg(char *buf, int buflen, struct sockaddr *client)
 int recv_ctl_msg()
 {
 	char *msgbuf;
-#if MRP_CTL_UDS
-	struct sockaddr_un client_addr;
-#else
-	struct sockaddr_in client_addr;
-#endif
+	struct client_s client;
 	struct msghdr msg;
 	struct iovec iov;
 	int bytes = 0;
@@ -497,13 +495,13 @@ int recv_ctl_msg()
 		return -1;
 
 	memset(&msg, 0, sizeof(msg));
-	memset(&client_addr, 0, sizeof(client_addr));
+	memset(&client, 0, sizeof(client));
 	memset(msgbuf, 0, MAX_MRPD_CMDSZ);
 
 	iov.iov_len = MAX_MRPD_CMDSZ;
 	iov.iov_base = msgbuf;
-	msg.msg_name = &client_addr;
-	msg.msg_namelen = sizeof(client_addr);
+	msg.msg_name = &client.addr.sa;
+	msg.msg_namelen = sizeof(client.addr);
 	msg.msg_iov = &iov;
 	msg.msg_iovlen = 1;
 
@@ -511,7 +509,7 @@ int recv_ctl_msg()
 	if (bytes <= 0)
 		goto out;
 
-	process_ctl_msg(msgbuf, bytes, (struct sockaddr*)&client_addr);
+	process_ctl_msg(msgbuf, bytes, &client);
  out:
 	free(msgbuf);
 
@@ -910,13 +908,13 @@ void usage(void)
 {
 	fprintf(stderr,
 		"\n"
-		"usage: mrpd [-hdlmvsp] [-u path/to/socket] -i interface-name"
+		"usage: mrpd [-hdlmvsp] [-u [path/to/socket]] -i interface-name"
 		"\n"
 		"options:\n"
 		"    -h  show this message\n"
 		"    -d  run daemon in the background\n"
 		"    -l  enable logging (ignored in daemon mode)\n"
-		"    -u  use unix domain sockets for control messages, defaults to "MRPD_UDS_SOCK"\n"
+		"    -u  use unix domain socket "MRPD_UDS_SOCK" for control messages\n"
 		"    -p  enable periodic timer\n"
 		"    -m  enable MMRP Registrar and Participant\n"
 		"    -v  enable MVRP Registrar and Participant\n"
@@ -936,9 +934,9 @@ int main(int argc, char *argv[])
 	mvrp_enable = 0;
 	msrp_enable = 0;
 	logging_enable = 0;
-	mrpd_port = MRPD_PORT_DEFAULT;
+	mrpd_port = 0;
 	interface = NULL;
-	uds_socket = MRPD_UDS_SOCK;
+	uds_socket = NULL;
 	interface_fd = -1;
 	registration = MRP_REGISTRAR_CTL_NORMAL;	/* default */
 	participant = MRP_APPLICANT_CTL_NORMAL;	/* default */
@@ -951,7 +949,7 @@ int main(int argc, char *argv[])
 	gc_timer = -1;
 
 	for (;;) {
-		c = getopt(argc, argv, "hdlmvspu:i:");
+		c = getopt(argc, argv, "hdlmvspui:");
 
 		if (c < 0)
 			break;
@@ -973,7 +971,7 @@ int main(int argc, char *argv[])
 			daemonize = 1;
 			break;
 		case 'u':
-			uds_socket = strdup(optarg);
+			uds_socket = MRPD_UDS_SOCK;
 			break;
 		case 'i':
 			if (interface) {
@@ -1009,7 +1007,11 @@ int main(int argc, char *argv[])
 	if (rc)
 		goto out;
 
-	rc = init_local_ctl();
+	if (uds_socket) {
+		rc = init_local_uds_ctl();
+	} else {
+		rc = init_local_udp_ctl();
+	}
 	if (rc)
 		goto out;
 
