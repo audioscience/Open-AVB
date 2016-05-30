@@ -72,6 +72,7 @@ int mvrp_enable;
 int msrp_enable;
 int logging_enable;
 int mrpd_port;
+char *uds_socket;
 
 char *interface;
 int interface_fd;
@@ -223,7 +224,7 @@ int init_local_ctl(void)
 
 	memset(&addr, 0, sizeof(addr));
 	addr.sun_family = AF_UNIX;
-	strncpy(addr.sun_path, MRPD_UDS_SOCK, sizeof(addr.sun_path));
+	strncpy(addr.sun_path, uds_socket, sizeof(addr.sun_path));
 
 	unlink(addr.sun_path);
 	addr_len = sizeof(addr);
@@ -909,12 +910,13 @@ void usage(void)
 {
 	fprintf(stderr,
 		"\n"
-		"usage: mrpd [-hdlmvsp] -i interface-name"
+		"usage: mrpd [-hdlmvsp] [-u path/to/socket] -i interface-name"
 		"\n"
 		"options:\n"
 		"    -h  show this message\n"
 		"    -d  run daemon in the background\n"
 		"    -l  enable logging (ignored in daemon mode)\n"
+		"    -u  use unix domain sockets for control messages, defaults to "MRPD_UDS_SOCK"\n"
 		"    -p  enable periodic timer\n"
 		"    -m  enable MMRP Registrar and Participant\n"
 		"    -v  enable MVRP Registrar and Participant\n"
@@ -936,6 +938,7 @@ int main(int argc, char *argv[])
 	logging_enable = 0;
 	mrpd_port = MRPD_PORT_DEFAULT;
 	interface = NULL;
+	uds_socket = MRPD_UDS_SOCK;
 	interface_fd = -1;
 	registration = MRP_REGISTRAR_CTL_NORMAL;	/* default */
 	participant = MRP_APPLICANT_CTL_NORMAL;	/* default */
@@ -948,7 +951,7 @@ int main(int argc, char *argv[])
 	gc_timer = -1;
 
 	for (;;) {
-		c = getopt(argc, argv, "hdlmvspi:");
+		c = getopt(argc, argv, "hdlmvspu:i:");
 
 		if (c < 0)
 			break;
@@ -968,6 +971,9 @@ int main(int argc, char *argv[])
 			break;
 		case 'd':
 			daemonize = 1;
+			break;
+		case 'u':
+			uds_socket = strdup(optarg);
 			break;
 		case 'i':
 			if (interface) {
