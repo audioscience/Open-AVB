@@ -374,7 +374,7 @@ mrpd_send_ctl_msg(struct sockaddr *client_addr, char *notify_data,
 	}
 #endif
 
-	return mrpd_process_ctl_msg_queue(&ctl_msg_queue);
+	return 0;
 }
 
 int process_ctl_msg(char *buf, int buflen, struct sockaddr *client)
@@ -901,6 +901,7 @@ void process_events(void)
 #if LOG_POLL_EVENTS
 		mrpd_log_printf("== EVENT DONE ==\n");
 #endif
+		mrpd_process_ctl_msg_queue(&ctl_msg_queue);
 	} while (1);
 }
 
