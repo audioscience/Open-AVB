@@ -184,10 +184,18 @@ typedef struct mrpdu_vectorattrib {
 #define MRPDU_VECT_LVA(x)	(((x) & (7 << 13)) == (1 << 13))
 #define MRPDU_VECT_LVA_FLAG	(1 << 13)
 
+/*
+* SOCKADDR_LEN() macro for runtime socket type determination requires
+* that struct sockaddr_un be valid for all OS types. Below dummy declaration
+* takes care of that requirement.
+*/
+#if !defined(__linux__)
+struct sockaddr_un { struct sockaddr dummy; };
+#endif
+
 #define SOCKADDR_LEN(sockaddr_ptr) ((sockaddr_ptr)->sa_family == AF_INET ? \
 		sizeof(struct sockaddr_in) : sizeof(struct sockaddr_un))
 #define CLIENT_SOCKADDR_LEN(client_t_ptr) SOCKADDR_LEN(&(client_t_ptr)->addr.sa)
-
 
 typedef struct client_s {
 	struct client_s *next;
