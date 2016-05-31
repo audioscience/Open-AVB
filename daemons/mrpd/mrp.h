@@ -40,8 +40,8 @@
 #define LOG_TIMERS 0
 #define LOG_MSRP_GARBAGE_COLLECTION 0
 #define LOG_TXNOW 0
-#define LOG_CLIENT_RECV 1
-#define LOG_CLIENT_SEND 1
+#define LOG_CLIENT_RECV 0
+#define LOG_CLIENT_SEND 0
 #define LOG_TIMESTAMP 0
 
 #define MRP_DEFAULT_POINT_TO_POINT_MAC	1	/* operPointToPointMAC */
