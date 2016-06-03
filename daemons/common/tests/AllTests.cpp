@@ -1,5 +1,5 @@
 /****************************************************************************
-  Copyright (c) 2012, AudioScience, Inc
+  Copyright (c) 2014, J.D. Koftinoff Software, Ltd.
   All rights reserved.
 
   Redistribution and use in source and binary forms, with or without
@@ -12,7 +12,7 @@
       notice, this list of conditions and the following disclaimer in the
       documentation and/or other materials provided with the distribution.
 
-   3. Neither the name of the Intel Corporation nor the names of its
+   3. Neither the name of J.D. Koftinoff Software, Ltd. nor the names of its
       contributors may be used to endorse or promote products derived from
       this software without specific prior written permission.
 
@@ -30,37 +30,10 @@
 
 ******************************************************************************/
 
-#ifndef PARSE_H_
-#define PARSE_H_
+#include "CppUTest/TestHarness.h"
+#include "CppUTest/CommandLineTestRunner.h"
 
-enum parse_types {
-	parse_null,
-	parse_u8,		/* uint8_t v */
-	parse_u16,		/* uint16_t v */
-	parse_u16_04x,		/* uint16_t v as 0002 (hex string of 4 digits) */
-	parse_u32,		/* uint32_t v */
-	parse_u64,		/* uint64_t v */
-	parse_h64,		/* uint64_t v */
-	parse_c64,		/* uint8_t a[8] */
-	parse_mac		/* uint8_t m[6] */
-};
-
-#define PARSE_DELIMITER ','
-#define PARSE_ASSIGN "="
-
-struct parse_param {
-	char *name;
-	enum parse_types type;
-	void *v;
-};
-
-/** Parse a string of parameters into specified types.
- * @param s a null terminated string to be parsed
- * @param len the length of buffer containing the string to be parsed. This is not strlen(s)!.
- * @param specs a pointer to an array of parsing specificaions
- * @param the parameter index at which a parsing error occured
- * @return 0 on success
- */
-int parse(const char *s, int len, struct parse_param *specs, int *err_index);
-
-#endif				/* PARSE_H_ */
+int main(int ac, char **av)
+{
+	return CommandLineTestRunner::RunAllTests(ac, av);
+}

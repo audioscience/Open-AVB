@@ -33,9 +33,15 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdint.h>
-#ifdef __linux__
+#if defined(__linux__) || defined(__APPLE__)
 #include <inttypes.h>
 #else
+
+typedef __int32 int32_t;
+typedef unsigned __int32 uint32_t;
+typedef __int64 int64_t;
+typedef unsigned __int64 uint64_t;
+
 #define SCNu64       "I64u"
 #define SCNx64       "I64x"
 #endif
@@ -48,7 +54,7 @@
 #define parse_log(a,b)
 #endif
 
-int parse(char *s, int len, struct parse_param *specs, int *err_index)
+int parse(const char *s, int len, struct parse_param *specs, int *err_index)
 {
 	int err = 0;
 	char *param;
@@ -59,9 +65,16 @@ int parse(char *s, int len, struct parse_param *specs, int *err_index)
 	uint64_t v_uint64;
 	int result = 0;
 	int count = 0;
+	int i;
 
-	/* make sure string is null terminated */
-	s[len - 1] = 0;
+	/* look for a null starting at the end of the buffer until
+	we find one or hit the beginning of the buffer */
+	for (i = len - 1; s[i] != 0 && i >= 0; --i) {}
+
+	/* If a null wasn't found before the element at offset 0, counter will be negative */
+	if (i < 0)
+		return -1;
+
 	guard = s + strlen(s);
 
 	parse_log("PARSE: %s\n", s);
@@ -87,7 +100,7 @@ int parse(char *s, int len, struct parse_param *specs, int *err_index)
 		case parse_null:
 			break;
 		case parse_u8:
-			result = sscanf(data, "%d", &v_uint);
+			result = sscanf(data, "%u", &v_uint);
 			if (result == 1) {
 				*(uint8_t *) specs->v = (uint8_t) v_uint;
 			} else {
@@ -104,7 +117,7 @@ int parse(char *s, int len, struct parse_param *specs, int *err_index)
 			}
 			break;
 		case parse_u16:
-			result = sscanf(data, "%d", &v_uint);
+			result = sscanf(data, "%u", &v_uint);
 			if (result == 1) {
 				*(uint16_t *) specs->v = (uint16_t) v_uint;
 			} else {
@@ -113,7 +126,7 @@ int parse(char *s, int len, struct parse_param *specs, int *err_index)
 			}
 			break;
 		case parse_u32:
-			result = sscanf(data, "%d", &v_uint);
+			result = sscanf(data, "%u", &v_uint);
 			if (result == 1) {
 				*(uint32_t *) specs->v = v_uint;
 			} else {
