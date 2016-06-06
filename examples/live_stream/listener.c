@@ -16,227 +16,51 @@
   *
   */
 
+#include <arpa/inet.h>
 #include <errno.h>
-#include <fcntl.h>
-#include <math.h>
-#include <poll.h>
+#include <linux/if.h>
+#include <netpacket/packet.h>
 #include <pthread.h>
 #include <signal.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <syslog.h>
-#include <unistd.h>
-
-#include <arpa/inet.h>
-
-#include <linux/if.h>
-
-#include <netinet/in.h>
-#include <net/ethernet.h>
-#include <netpacket/packet.h>
+#include <sys/ioctl.h>
 
 #include <pci/pci.h>
 
-#include <sys/ioctl.h>
-#include <sys/mman.h>
-#include <sys/resource.h>
-#include <sys/socket.h>
-#include <sys/stat.h>
-#include <sys/time.h>
-#include <sys/queue.h>
-#include <sys/un.h>
-#include <sys/user.h>
-
 #include "avb.h"
-
-/* global macros */
-#define MAX_FRAME_SIZE		1500
-
-device_t igb_dev;
-
-unsigned char DEST_ADDR[] = { 0x91, 0xE0, 0xF0, 0x00, 0x0E, 0x80 };
-
-unsigned char stream_id[8];
-
-int control_socket = 0;
-volatile int talker = 0;
+#include "listener_mrp_client.h"
 
 #define USE_MRPD 1
 
-#ifdef USE_MRPD
-int msg_process(char *buf, int buflen)
-{
-	uint32_t id;
-        int j ;
-	fprintf(stderr, "Msg: %s\n", buf);
- 	int l = 0;
-	if ('S' == buf[l++] && 'N' == buf[l++] && 'E' == buf[l++] && 'T' == buf[++l]) {
-		while ('S' != buf[l++]);
-		l++;
-		for(j = 0; j < 8 ; l+=2, j++)
-		{
-			sscanf(&buf[l],"%02x",&id);
-			stream_id[j] = (unsigned char)id;
-		}
-		talker = 1;
-	}
-	return 0;
-}
+/* globals */
 
-int recv_msg()
-{
-	char *databuf;
-	int bytes = 0;
-
-	databuf = (char *)malloc(2000);
-	if (NULL == databuf)
-		return -1;
-
-	memset(databuf, 0, 2000);
-	bytes = recv(control_socket, databuf, 2000, 0);
-	if (bytes <= -1) {
-		free(databuf);
-		return -1;
-	}
-	return msg_process(databuf, bytes);
-
-}
-
-int await_talker()
-{
-	while (0 == talker)	
-		recv_msg();
-	return 0;
-}
-
-int send_msg(char *data, int data_len)
-{
-	struct sockaddr_in addr;
-	memset(&addr, 0, sizeof(addr));
-	addr.sin_family = AF_INET;
-	addr.sin_port = htons(MRPD_PORT_DEFAULT);
-	addr.sin_addr.s_addr = inet_addr("127.0.0.1");
-	inet_aton("127.0.0.1", &addr.sin_addr);
-	if (-1 != control_socket)
-		return (sendto(control_socket, data, data_len, 0, (struct sockaddr*)&addr, (socklen_t)sizeof(addr)));
-	else 
-		return 0;
-}
-
-int mrp_disconnect()
-{
-	int rc;
-	char *msgbuf = malloc(1500);
-	if (NULL == msgbuf)
-		return -1;
-	memset(msgbuf, 0, 1500);
-	sprintf(msgbuf, "BYE");
-	rc = send_msg(msgbuf, 1500);
-
-	free(msgbuf);
-	return rc;
-}
-	
-int report_domain_status()
-{
-	int rc;
-	char* msgbuf = malloc(1500);
-
-	if (NULL == msgbuf)
-		return -1;
-	memset(msgbuf, 0, 1500);
-	sprintf(msgbuf, "S+D:C=6,P=3,V=0002");
-	
-	rc = send_msg(msgbuf, 1500);
-
-	free(msgbuf);
-	return rc;
-}
-
-int send_ready()
-{
-	char *databuf;
-	int rc;
-	databuf = malloc(1500);
-	if (NULL == databuf)
-		return -1;
-	memset(databuf, 0, 1500);
-	sprintf(databuf, "S+L:L=%02x%02x%02x%02x%02x%02x%02x%02x, D=2",
-		     stream_id[0], stream_id[1],
-		     stream_id[2], stream_id[3],
-		     stream_id[4], stream_id[5],
-		     stream_id[6], stream_id[7]);
-	rc = send_msg(databuf, 1500);
-
-#ifdef DEBUG
-	fprintf(stdout,"Ready-Msg: %s\n", databuf);
-#endif 
-
-	free(databuf);
-	return rc;
-}
-
-int send_leave()
-{
-	char *databuf;
-	int rc;
-	databuf = malloc(1500);
-	if (NULL == databuf)
-		return -1;
-	memset(databuf, 0, 1500);
-	sprintf(databuf, "S-L:L=%02x%02x%02x%02x%02x%02x%02x%02x, D=3",
-		     stream_id[0], stream_id[1],
-		     stream_id[2], stream_id[3],
-		     stream_id[4], stream_id[5],
-		     stream_id[6], stream_id[7]);
-	rc = send_msg(databuf, 1500);
-	free(databuf);
-	return rc;
-}
-
-int create_socket()
-{
-	struct sockaddr_in addr;
-	control_socket = socket(AF_INET, SOCK_DGRAM, 0);
-		
-	/** in POSIX fd 0,1,2 are reserved */
-	if (2 > control_socket) {
-		if (-1 > control_socket)
-			close(control_socket);
-		return -EINVAL;
-	}
-	
-	memset(&addr, 0, sizeof(addr));
-	addr.sin_family = AF_INET;
-	addr.sin_port = htons(0);
-	
-	if(0 > (bind(control_socket, (struct sockaddr*)&addr, sizeof(addr)))) {
-		fprintf(stderr, "Could not bind socket.\n");
-		close(control_socket);
-		return -EINVAL;
-	}
-	return 0;
-}
-
-#endif
+unsigned char glob_dest_addr[] = { 0x91, 0xE0, 0xF0, 0x00, 0x0E, 0x80 };
+struct mrp_listener_ctx *ctx_sig;//Context pointer for signal handler
 
 void sigint_handler(int signum)
 {
-	fprintf(stderr, "got SIGINT\n");
-#ifdef USE_MRPD
-	if (0 != talker)
-		send_leave();
-#endif
-	if (2 > control_socket)
-	{
-		close(control_socket);
+	int ret;
+
+	fprintf(stderr, "Received signal %d:leaving...\n", signum);
+#if USE_MRPD
+	if (0 != ctx_sig->talker) {
+		ret = send_leave(ctx_sig);
+		if (ret)
+			printf("send_leave failed\n");
 	}
-	exit(0);
+#endif /* USE_MRPD */
+	if (2 > ctx_sig->control_socket)
+	{
+		close(ctx_sig->control_socket);
+		ret = mrp_disconnect(ctx_sig);
+		if (ret)
+			printf("mrp_disconnect failed\n");
+	}
+	exit(EXIT_SUCCESS);
 }
 
-int main (int argc, char *argv[ ])
+int main(int argc, char *argv[ ])
 {
+	device_t igb_dev;
 	struct ifreq device;
 	int error;
 	struct sockaddr_ll ifsock_addr;
@@ -249,42 +73,82 @@ int main (int argc, char *argv[ ])
 	unsigned char frame[MAX_FRAME_SIZE];
 	int size, length;
 	struct sched_param sched;
+	struct mrp_listener_ctx *ctx = malloc(sizeof(struct mrp_listener_ctx));
+	struct mrp_domain_attr *class_a = malloc(sizeof(struct mrp_domain_attr));
+	struct mrp_domain_attr *class_b = malloc(sizeof(struct mrp_domain_attr));
+	ctx_sig = ctx;
+	int rc;
 
 	if (argc < 2) {
 		fprintf(stderr, "Usage : %s <interface_name> <payload>\n",argv[0]);
-		return -EINVAL;
+		return EINVAL;
 	}
 	signal(SIGINT, sigint_handler);
 
-#ifdef USE_MRPD
-	if (create_socket()) {
+#if USE_MRPD
+	rc = mrp_listener_client_init(ctx);
+	if (rc)
+	{
+		printf("failed to initialize global variables\n");
+		return EXIT_FAILURE;
+	}
+	if (create_socket(ctx)) {
 		fprintf(stderr, "Socket creation failed.\n");
-		return (errno);
+		return errno;
+	}
+	rc = mrp_monitor(ctx);
+	if (rc)
+	{
+		printf("failed creating MRP monitor thread\n");
+		return EXIT_FAILURE;
+	}
+	rc=mrp_get_domain(ctx, class_a, class_b);
+	if (rc)
+	{
+		printf("failed calling mrp_get_domain()\n");
+		return EXIT_FAILURE;
 	}
 
-	report_domain_status();
+	printf("detected domain Class A PRIO=%d VID=%04x...\n",class_a->priority,class_a->vid);
+
+	rc = report_domain_status(class_a,ctx);
+	if (rc) {
+		printf("report_domain_status failed\n");
+		return EXIT_FAILURE;
+	}
+	rc = join_vlan(class_a, ctx);
+	if (rc) {
+		printf("join_vlan failed\n");
+		return EXIT_FAILURE;
+	}
+
 	fprintf(stdout,"Waiting for talker...\n");
-	await_talker();
-	send_ready();
-#endif
+	await_talker(ctx);
+	rc = send_ready(ctx);
+	if (rc) {
+		printf("send_ready failed\n");
+		return EXIT_FAILURE;
+	}
+
+#endif /* USE_MRPD */
 	iface = strdup(argv[1]);
 
 	error = pci_connect(&igb_dev);
 	if (error) {
 		fprintf(stderr, "connect failed (%s) - are you running as root?\n", strerror(errno));
-		return (errno);
+		return errno;
 	}
 
 	error = igb_init(&igb_dev);
 	if (error) {
 		fprintf(stderr, "init failed (%s) - is the driver really loaded?\n", strerror(errno));
-		return (errno);
+		return errno;
 	}
 
 	socket_descriptor = socket(AF_PACKET, SOCK_RAW, htons(ETHER_TYPE_AVTP));
 	if (socket_descriptor < 0) {
 		fprintf(stderr, "failed to open socket: %s \n", strerror(errno));
-		return -EINVAL;
+		return EINVAL;
 	}
 
 	memset(&device, 0, sizeof(device));
@@ -292,7 +156,7 @@ int main (int argc, char *argv[ ])
 	error = ioctl(socket_descriptor, SIOCGIFINDEX, &device);
 	if (error < 0) {
 		fprintf(stderr, "Failed to get index of iface %s: %s\n", iface, strerror(errno));
-		return -EINVAL;
+		return EINVAL;
 	}
 
 	ifindex = device.ifr_ifindex;
@@ -303,18 +167,18 @@ int main (int argc, char *argv[ ])
 	error = bind(socket_descriptor, (struct sockaddr *) & ifsock_addr, sizeof(ifsock_addr));
 	if (error < 0) {
 		fprintf(stderr, "Failed to bind: %s\n", strerror(errno));
-		return -EINVAL;
+		return EINVAL;
 	}
 
 	memset(&mreq, 0, sizeof(mreq));
 	mreq.mr_ifindex = ifindex;
 	mreq.mr_type = PACKET_MR_MULTICAST;
 	mreq.mr_alen = 6;
-	memcpy(mreq.mr_address, DEST_ADDR, mreq.mr_alen);
+	memcpy(mreq.mr_address, glob_dest_addr, mreq.mr_alen);
 	error = setsockopt(socket_descriptor, SOL_PACKET, PACKET_ADD_MEMBERSHIP, &mreq, sizeof(mreq));
 	if (error < 0) {
 		fprintf(stderr, "Failed to add multi-cast addresses to port: %u\n", ifindex);
-		return -EINVAL;
+		return EINVAL;
 	}
 
 	size = sizeof(ifsock_addr);
@@ -343,8 +207,9 @@ int main (int argc, char *argv[ ])
 
 	usleep(100);
 	close(socket_descriptor);
+	free(ctx);
+	free(class_a);
+	free(class_b);
 
-	return 0;
+	return EXIT_SUCCESS;
 }
-
-

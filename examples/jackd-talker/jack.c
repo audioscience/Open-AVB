@@ -8,11 +8,9 @@
 #include <jack/ringbuffer.h>
 #include "jack.h"
 #include "defines.h"
+#include "talker_mrp_client.h"
 
-extern volatile int halt_tx;
-extern volatile int listeners;
-extern volatile int unleash_jack;
-
+extern volatile int glob_unleash_jack;
 
 static jack_port_t** inputports;
 static jack_default_audio_sample_t** in;
@@ -31,17 +29,18 @@ static int process(jack_nframes_t nframes, void* arg)
 {
 	int cnt;
 	static int total;
+	struct mrp_talker_ctx *ctx = (struct mrp_talker_ctx *) arg;
 
 	/* Do nothing until we're ready to begin. */
-	if (!unleash_jack) {
+	if (!glob_unleash_jack) {
 		printf ("nothing to do\n");
 		return 0;
 	}
-	
+
 	for(int i = 0; i < CHANNELS; i++) {
 		in[i] = jack_port_get_buffer(inputports[i], nframes);
 	}
-		
+
 	for (size_t i = 0; i < nframes; i++) {
 		for(int j = 0; j < CHANNELS; j++) {
 			total++;
@@ -54,7 +53,7 @@ static int process(jack_nframes_t nframes, void* arg)
 			} else {
 				printf ("Only %i bytes available after %i samples\n",
 						cnt, total);
-				halt_tx = 1;
+				ctx->halt_tx = 1;
 			}
 		}
 	}
@@ -70,11 +69,13 @@ static int process(jack_nframes_t nframes, void* arg)
 
 void jack_shutdown(void* arg)
 {
+	struct mrp_talker_ctx *ctx = (struct mrp_talker_ctx *) arg;
+
 	printf("JACK shutdown\n");
-	halt_tx = 1;
+	ctx->halt_tx = 1;
 }
 
-jack_client_t* init_jack(void)
+jack_client_t* init_jack(struct mrp_talker_ctx *ctx)
 {
 	jack_client_t *client;
 	const char *client_name = "simple_talker";
@@ -86,7 +87,7 @@ jack_client_t* init_jack(void)
 
 	if (NULL == client) {
 		fprintf (stderr, "jack_client_open() failed\n ");
-		exit (1);
+		exit(EXIT_FAILURE);
 	}
 	if (status & JackServerStarted) {
 		fprintf (stderr, "JACK server started\n");
@@ -96,8 +97,8 @@ jack_client_t* init_jack(void)
 		fprintf (stderr, "unique name `%s' assigned\n", client_name);
 	}
 
-	jack_set_process_callback(client, process, 0);
-	jack_on_shutdown(client, jack_shutdown, 0);
+	jack_set_process_callback(client, process, (void *)ctx);
+	jack_on_shutdown(client, jack_shutdown, (void *)ctx);
 
 	if (jack_activate (client))
 		fprintf (stderr, "cannot activate client");
@@ -113,19 +114,19 @@ jack_client_t* init_jack(void)
 	for(int i = 0; i < CHANNELS; i++)
 	{
 		char* portName;
-		if (asprintf(&portName, "input%d", i) < 0) 
+		if (asprintf(&portName, "input%d", i) < 0)
 		{
 			fprintf(stderr, "Could not create portname for port %d", i);
-			exit(1);
-		}	
-		
+			exit(EXIT_FAILURE);
+		}
+
 		inputports[i] = jack_port_register (client, portName,
 				JACK_DEFAULT_AUDIO_TYPE, JackPortIsInput, 0);
-		if (NULL == inputports[i]) 
+		if (NULL == inputports[i])
 		{
 			fprintf (stderr, "cannot register input port \"%d\"!\n", i);
 			jack_client_close (client);
-			exit (1);
+			exit(EXIT_FAILURE);
 		}
 	}
 

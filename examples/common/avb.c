@@ -40,7 +40,7 @@
 
 #include "avb.h"
 
-int pci_connect(device_t * igb_dev)
+int pci_connect(device_t *igb_dev)
 {
 	char devpath[IGB_BIND_NAMESZ];
 	struct pci_access *pacc;
@@ -48,16 +48,12 @@ int pci_connect(device_t * igb_dev)
 	int err;
 
 	memset(igb_dev, 0, sizeof(device_t));
-
 	pacc = pci_alloc();
-
 	pci_init(pacc);
-
 	pci_scan_bus(pacc);
 
 	for (dev = pacc->devices; dev; dev = dev->next) {
-		pci_fill_info(dev,
-				PCI_FILL_IDENT | PCI_FILL_BASES | PCI_FILL_CLASS);
+		pci_fill_info(dev, PCI_FILL_IDENT | PCI_FILL_BASES | PCI_FILL_CLASS);
 		igb_dev->pci_vendor_id = dev->vendor_id;
 		igb_dev->pci_device_id = dev->device_id;
 		igb_dev->domain = dev->domain;
@@ -67,39 +63,43 @@ int pci_connect(device_t * igb_dev)
 		snprintf(devpath, IGB_BIND_NAMESZ, "%04x:%02x:%02x.%d",
 				dev->domain, dev->bus, dev->dev, dev->func);
 		err = igb_probe(igb_dev);
-		if (err)
+		if (err) {
 			continue;
-
+		}
 		printf("attaching to %s\n", devpath);
 		err = igb_attach(devpath, igb_dev);
 		if (err) {
-			printf("attach failed! (%s)\n", strerror(errno));
+			printf("attach failed! (%s)\n", strerror(err));
+			continue;
+		}
+		err = igb_attach_tx(igb_dev);
+		if (err) {
+			printf("attach_tx failed! (%s)\n", strerror(err));
+			igb_detach(igb_dev);
 			continue;
 		}
 		goto out;
 	}
-
 	pci_cleanup(pacc);
 	return ENXIO;
-
-out:	pci_cleanup(pacc);
-
+out:
+	pci_cleanup(pacc);
 	return 0;
 }
 
-int gptpinit(int *shm_fd, char *memory_offset_buffer)
+int gptpinit(int *shm_fd, char **memory_offset_buffer)
 {
 	*shm_fd = shm_open(SHM_NAME, O_RDWR, 0);
 	if (*shm_fd == -1) {
 		perror("shm_open()");
 		return false;
 	}
-	memory_offset_buffer =
+	*memory_offset_buffer =
 	    (char *)mmap(NULL, SHM_SIZE, PROT_READ | PROT_WRITE, MAP_SHARED,
 			 *shm_fd, 0);
-	if (memory_offset_buffer == (char *)-1) {
+	if (*memory_offset_buffer == (char *)-1) {
 		perror("mmap()");
-		memory_offset_buffer = NULL;
+		*memory_offset_buffer = NULL;
 		shm_unlink(SHM_NAME);
 		return false;
 	}
@@ -122,10 +122,34 @@ int gptpscaling(gPtpTimeData * td, char *memory_offset_buffer)
 	memcpy(td, memory_offset_buffer + sizeof(pthread_mutex_t), sizeof(*td));
 	pthread_mutex_unlock((pthread_mutex_t *) memory_offset_buffer);
 
-	fprintf(stderr, "ml_phoffset = %lld, ls_phoffset = %lld\n",
+	fprintf(stderr, "ml_phoffset = %" PRId64 ", ls_phoffset = %" PRId64 "\n",
 		td->ml_phoffset, td->ls_phoffset);
-	fprintf(stderr, "ml_freqffset = %d, ls_freqoffset = %d\n",
+	fprintf(stderr, "ml_freqffset = %Lf, ls_freqoffset = %Lf\n",
 		td->ml_freqoffset, td->ls_freqoffset);
+
+	return true;
+}
+
+bool gptplocaltime(const gPtpTimeData * td, uint64_t* now_local)
+{
+	struct timespec sys_time;
+	uint64_t now_system;
+	uint64_t system_time;
+	int64_t delta_local;
+	int64_t delta_system;
+
+	if (!td || !now_local)
+		return false;
+
+	if (clock_gettime(CLOCK_REALTIME, &sys_time) != 0)
+		return false;
+
+	now_system = (uint64_t)sys_time.tv_sec * 1000000000ULL + (uint64_t)sys_time.tv_nsec;
+
+	system_time = td->local_time + td->ls_phoffset;
+	delta_system = now_system - system_time;
+	delta_local = td->ls_freqoffset * delta_system;
+	*now_local = td->local_time + delta_local;
 
 	return true;
 }

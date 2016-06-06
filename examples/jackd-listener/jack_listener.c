@@ -23,47 +23,38 @@ SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 #define _GNU_SOURCE
 
-#include <arpa/inet.h>
 #include <errno.h>
-#include <netinet/if_ether.h>
-#include <netinet/in.h>
-#include <pcap/pcap.h>
 #include <signal.h>
-#include <stdio.h>
-#include <stdint.h>
-#include <string.h>
-#include <stdlib.h>
-#include <sys/socket.h>
-#include <sys/types.h>
-#include <unistd.h>
-#include <assert.h>
 
+#include <pcap/pcap.h>
 #include <jack/jack.h>
 #include <jack/ringbuffer.h>
-#include <jack/weakmacros.h>
-#include <jack/thread.h>
-
 #include <sndfile.h>
 
-#define LIBSND
+#include "listener_mrp_client.h"
 
-#define MRPD_PORT_DEFAULT 7500
+#define LIBSND 1
 
-#define ETHERNET_HEADER_SIZE 18
-#define SEVENTEEN22_HEADER_PART1_SIZE 4
-#define STREAM_ID_SIZE 8
-#define SEVENTEEN22_HEADER_PART2_SIZE 10
-#define SIX1883_HEADER_SIZE 10
-#define HEADER_SIZE ETHERNET_HEADER_SIZE + SEVENTEEN22_HEADER_PART1_SIZE + STREAM_ID_SIZE + SEVENTEEN22_HEADER_PART2_SIZE + SIX1883_HEADER_SIZE 
+#define VERSION_STR "1.0"
 
-#define SAMPLES_PER_SECOND 48000
-#define SAMPLES_PER_FRAME 6
-#define CHANNELS 2
-#define SAMPLE_SIZE 4
+#define ETHERNET_HEADER_SIZE (18)
+#define SEVENTEEN22_HEADER_PART1_SIZE (4)
+#define STREAM_ID_SIZE (8)
+#define SEVENTEEN22_HEADER_PART2_SIZE (10)
+#define SIX1883_HEADER_SIZE (10)
+#define HEADER_SIZE (ETHERNET_HEADER_SIZE		\
+			+ SEVENTEEN22_HEADER_PART1_SIZE \
+			+ STREAM_ID_SIZE		\
+			+ SEVENTEEN22_HEADER_PART2_SIZE \
+			+ SIX1883_HEADER_SIZE)
+#define SAMPLES_PER_SECOND (48000)
+#define SAMPLES_PER_FRAME (6)
+#define CHANNELS (2)
+#define SAMPLE_SIZE (4)
+#define DEFAULT_RINGBUFFER_SIZE (32768)
+#define MAX_SAMPLE_VALUE ((1U << ((sizeof(int32_t) * 8) -1)) -1)
 
-#define DEFAULT_RINGBUFFER_SIZE 32768
-
-#define MAX_SAMPLE_VALUE ((1U << ((sizeof(int32_t)*8)-1))-1)
+struct mrp_listener_ctx *ctx_sig;//Context pointer for signal handler
 
 struct ethernet_header{
 	u_char dst[6];
@@ -72,189 +63,63 @@ struct ethernet_header{
 	u_char type[2];
 };
 
-// global
-unsigned char stream_id[STREAM_ID_SIZE];
-volatile int talker = 0;
-int control_socket;
-pcap_t* handle;
-u_char ETHER_TYPE[] = { 0x22, 0xf0 };
-SNDFILE* snd_file;
+/* globals */
 
+static const char *version_str = "jack_listener v" VERSION_STR "\n"
+    "Copyright (c) 2013, Katja Rohloff\n";
+
+pcap_t* handle;
+u_char glob_ether_type[] = { 0x22, 0xf0 };
+SNDFILE* snd_file;
 static jack_port_t** outputports;
 static jack_default_audio_sample_t** out;
 jack_ringbuffer_t* ringbuffer;
-
 jack_client_t* client;
-
 volatile int ready = 0;
 
 static void help()
 {
 	fprintf(stderr, "\n"
-		"Usage: listener [-h] -i interface -f file_name.wav"
+		"Usage: jack_listener [-h] -i interface -f file_name.wav"
 		"\n"
 		"Options:\n"
 		"    -h  show this message\n"
 		"    -i  specify interface for AVB connection\n"
-		"\n" "%s" "\n");
-	exit(1);
+		"\n" "%s" "\n", version_str);
+	exit(EXIT_FAILURE);
 }
 
-int send_msg(char *data, int data_len)
+void shutdown_and_exit(int sig)
 {
-	int rc;
-	struct sockaddr_in addr;
+	int ret;
 
-	memset(&addr, 0, sizeof(addr));
-
-	addr.sin_family = AF_INET;
-	addr.sin_port = htons(MRPD_PORT_DEFAULT);
-	addr.sin_addr.s_addr = inet_addr("127.0.0.1");
-	inet_aton("127.0.0.1", &addr.sin_addr);
-
-	rc = sendto(control_socket, data, data_len, 0, (struct sockaddr*)&addr, (socklen_t)sizeof(addr));
-	return rc;
-}
-
-int send_process(char type)
-{ 
-	int rc;
-	char* msgbuf = malloc(1500);
-
-	if (NULL == msgbuf) {
-		return -1;
-	}
-
-	memset(msgbuf, 0, 1500);
-	
-	switch(type) {
-	case 'M':
-		sprintf(msgbuf, "BYE");
-		break;
-	case 'D':
-		sprintf(msgbuf, "S+D:C=6,P=3,V=0002");
-		break;
-	case 'R':
-		sprintf(msgbuf, "S+L:L=%02x%02x%02x%02x%02x%02x%02x%02x, D=2",
-		     stream_id[0], stream_id[1],
-		     stream_id[2], stream_id[3],
-		     stream_id[4], stream_id[5],
-		     stream_id[6], stream_id[7]);
-		break;
-	case 'L':
-		sprintf(msgbuf, "S-L:L=%02x%02x%02x%02x%02x%02x%02x%02x, D=3",
-		     stream_id[0], stream_id[1],
-		     stream_id[2], stream_id[3],
-		     stream_id[4], stream_id[5],
-		     stream_id[6], stream_id[7]);
-		break;
-	default:
-		return -1;
-	}
-
-	rc = send_msg(msgbuf, 1500);
-
-	free(msgbuf);
-	return rc;
-}
-
-int create_socket()
-{
-	struct sockaddr_in addr;
-	
-	control_socket = socket(AF_INET, SOCK_DGRAM, 0);
-
-	/** POSIX: fd 0,1,2 are reserved */
-	if (2 > control_socket) {
-		close(control_socket);
-		return -1;
-	}
-
-	memset(&addr, 0, sizeof(addr));
-	addr.sin_family = AF_INET;
-	addr.sin_port = htons(0);
-
-	if(0 > (bind(control_socket, (struct sockaddr*)&addr, sizeof(addr)))) {
-		fprintf(stderr, "Could not bind socket.\n");
-		close(control_socket);
-		return -1;
-	}
-
-	return 0;
-}
-
-int recvmsg_process(char *buf, int buflen)
-{
-	uint32_t id;
-	int l = 0;
-	
-	if ('S' == buf[l++] && 'N' == buf[l++] && 'E' == buf[l++] && 'T' == buf[++l]) {
-
-		while ('S' != buf[l++]);
-		l++;
-
-		for(int j = 0; j < 8 ; l+=2, j++) {
-			sscanf(&buf[l],"%02x",&id);
-			stream_id[j] = (unsigned char)id;
-		}
-		talker = 1;
-	}
-
-	return 0;
-}
-
-int recv_msg()
-{
-	int bytes = 0;
-	char* msgbuf = malloc(2000);
-	
-	if (NULL == msgbuf) {
-		return -1;
-	}
-
-	memset(msgbuf, 0, 2000);
-
-	bytes = recv(control_socket, msgbuf, 2000, 0);
-
-	if (bytes <= -1){
-		free(msgbuf);
-		return -1;
-	}
-
-	return recvmsg_process(msgbuf, bytes);
-}
-
-int await_talker()
-{
-	while (0 == talker) {	
-		recv_msg();
-	}
-
-	return 0;
-}
-
-void shutdown_all(int sig)
-{
+	if (sig != 0)
+		fprintf(stdout,"Received signal %d:", sig);
 	fprintf(stdout,"Leaving...\n");
 
-	if (0 != talker) {
-		send_process('L'); /** send leave */
+	if (0 != ctx_sig->talker) {
+		ret = send_leave(ctx_sig);
+		if (ret)
+			printf("send_leave failed\n");
 	}
 
-	send_process('M'); /** mrp disconnect */
-	close(control_socket);
+	ret = mrp_disconnect(ctx_sig);
+	if (ret)
+		printf("mrp_disconnect failed\n");
+
+	close(ctx_sig->control_socket);
 
 	if (NULL != handle) {
 		pcap_breakloop(handle);
 		pcap_close(handle);
 	}
 
-#ifdef LIBSND
+#if LIBSND
 	if (NULL != snd_file) {
 		sf_write_sync(snd_file);
 		sf_close(snd_file);
 	}
-#endif
+#endif /* LIBSND */
 
 	if (NULL != client) {
 		fprintf(stdout, "jack\n");
@@ -262,69 +127,72 @@ void shutdown_all(int sig)
 		jack_ringbuffer_free(ringbuffer);
 	}
 
-	exit(0);
+	if (sig != 0)
+		exit(EXIT_SUCCESS); /* actual signal */
+	else
+		exit(EXIT_FAILURE); /* fail condition */
 }
 
 void pcap_callback(u_char* args, const struct pcap_pkthdr* packet_header, const u_char* packet)
 {
 	unsigned char* test_stream_id;
 	struct ethernet_header* eth_header;
-	
 	uint32_t* mybuf;
 	uint32_t frame[CHANNELS];
 	jack_default_audio_sample_t jackframe[CHANNELS];
-
 	int cnt;
 	static int total;
+	struct mrp_listener_ctx *ctx = (struct mrp_listener_ctx*) args;
+	(void) packet_header; /* unused */
 
 	eth_header = (struct ethernet_header*)(packet);
 
-	if (0 != memcmp(ETHER_TYPE,eth_header->type,sizeof(eth_header->type))) {
+	if (0 != memcmp(glob_ether_type, eth_header->type,sizeof(eth_header->type))) {
 		return;
 	}
 
 	test_stream_id = (unsigned char*)(packet + ETHERNET_HEADER_SIZE + SEVENTEEN22_HEADER_PART1_SIZE);
-	if (0 != memcmp(test_stream_id, stream_id, STREAM_ID_SIZE)) {
+	if (0 != memcmp(test_stream_id, ctx->stream_id, STREAM_ID_SIZE)) {
 		return;
 	}
-		
+
 	mybuf = (uint32_t*) (packet + HEADER_SIZE);
-			
-	for(int i = 0; i < SAMPLES_PER_FRAME * CHANNELS; i+=CHANNELS) {	
+
+	for(int i = 0; i < SAMPLES_PER_FRAME * CHANNELS; i+=CHANNELS) {
 
 		memcpy(&frame[0], &mybuf[i], sizeof(frame));
 
 		for(int j = 0; j < CHANNELS; j++) {
-			
+
 			frame[j] = ntohl(frame[j]);   /* convert to host-byte order */
 			frame[j] &= 0x00ffffff;       /* ignore leading label */
 			frame[j] <<= 8;               /* left-align remaining PCM-24 sample */
-			
+
 			jackframe[j] = ((int32_t)frame[j])/(float)(MAX_SAMPLE_VALUE);
 		}
 
 		if ((cnt = jack_ringbuffer_write_space(ringbuffer)) >= SAMPLE_SIZE * CHANNELS) {
 			jack_ringbuffer_write(ringbuffer, (void*)&jackframe[0], SAMPLE_SIZE * CHANNELS);
- 		
+
 		} else {
 			fprintf(stdout, "Only %i bytes available after %i samples.\n", cnt, total);
 		}
 
 		if (jack_ringbuffer_write_space(ringbuffer) <= SAMPLE_SIZE * CHANNELS * DEFAULT_RINGBUFFER_SIZE / 4) {
-			/** Ringbuffer has only 25% or less write space available, it's time to tell jackd 
+			/** Ringbuffer has only 25% or less write space available, it's time to tell jackd
 			to read some data. */
 			ready = 1;
 		}
 
-#ifdef LIBSND
+#if LIBSND
 		sf_writef_float(snd_file, jackframe, 1);
-#endif
+#endif /* LIBSND */
 	}
 }
 
 static int process_jack(jack_nframes_t nframes, void* arg)
 {
-	int cnt;
+	(void) arg; /* unused */
 
 	if (!ready) {
 		return 0;
@@ -335,7 +203,7 @@ static int process_jack(jack_nframes_t nframes, void* arg)
 	}
 
 	for(size_t i = 0; i < nframes; i++) {
-		
+
 		if (jack_ringbuffer_read_space(ringbuffer) >= SAMPLE_SIZE * CHANNELS) {
 
 			for(int j = 0; j < CHANNELS; j++){
@@ -355,11 +223,13 @@ static int process_jack(jack_nframes_t nframes, void* arg)
 
 void jack_shutdown(void* arg)
 {
+	(void)arg; /* unused*/
+
 	printf("JACK shutdown\n");
-	shutdown_all(0);
+	shutdown_and_exit(0);
 }
 
-jack_client_t* init_jack(void)
+jack_client_t* init_jack(struct mrp_listener_ctx *ctx)
 {
 	const char* client_name = "simple_listener";
 	const char* server_name = NULL;
@@ -370,8 +240,7 @@ jack_client_t* init_jack(void)
 
 	if (NULL == client) {
 		fprintf (stderr, "jack_client_open() failed\n ");
-		shutdown_all(0);
-		exit (1);
+		shutdown_and_exit(0);
 	}
 
 	if (status & JackServerStarted) {
@@ -383,8 +252,8 @@ jack_client_t* init_jack(void)
 		fprintf (stderr, "unique name `%s' assigned\n", client_name);
 	}
 
-	jack_set_process_callback(client, process_jack, 0);
-	jack_on_shutdown(client, jack_shutdown, 0);
+	jack_set_process_callback(client, process_jack, (void *)ctx);
+	jack_on_shutdown(client, jack_shutdown, (void *)ctx);
 
 	outputports = (jack_port_t**) malloc (CHANNELS * sizeof (jack_port_t*));
 	out = (jack_default_audio_sample_t**) malloc (CHANNELS * sizeof (jack_default_audio_sample_t*));
@@ -395,34 +264,30 @@ jack_client_t* init_jack(void)
 	memset(ringbuffer->buf, 0, ringbuffer->size);
 
 	for(int i = 0; i < CHANNELS; i++) {
-		
+
 		char* portName;
 		if (asprintf(&portName, "output%d", i) < 0) {
 			fprintf(stderr, "could not create portname for port %d\n", i);
-			shutdown_all(0);
-			exit(1);
-		}	
-		
+			shutdown_and_exit(0);
+		}
+
 		outputports[i] = jack_port_register (client, portName, JACK_DEFAULT_AUDIO_TYPE, JackPortIsOutput, 0);
 		if (NULL == outputports[i]) {
 			fprintf (stderr, "cannot register output port \"%d\"!\n", i);
-			shutdown_all(0);
-			exit (1);
+			shutdown_and_exit(0);
 		}
 	}
 
 	const char** ports;
 	if (jack_activate (client)) {
-		fprintf (stderr, "cannot activate client\n");		
-		shutdown_all(0);
-		exit(1);
+		fprintf (stderr, "cannot activate client\n");
+		shutdown_and_exit(0);
 	}
 
 	ports = jack_get_ports(client, NULL, NULL, JackPortIsPhysical|JackPortIsInput);
-	if(NULL == ports) { 
-		fprintf (stderr, "no physical playback ports\n");		
-		shutdown_all(0);
-		exit(1);
+	if(NULL == ports) {
+		fprintf (stderr, "no physical playback ports\n");
+		shutdown_and_exit(0);
 	}
 
 	int i = 0;
@@ -433,28 +298,30 @@ jack_client_t* init_jack(void)
 	}
 
 	free(ports);
+
+	return client;
 }
 
 
 int main(int argc, char *argv[])
 {
-	int ret;
-
 	char* dev = NULL;
 	char errbuf[PCAP_ERRBUF_SIZE];
 	struct bpf_program comp_filter_exp;		/** The compiled filter expression */
-	char filter_exp[] = "ether dst 91:E0:F0:00:0e:80";	/** The filter expression */
-	struct pcap_pkthdr header;	/** header pcap gives us */
-	const u_char* packet;		/** actual packet */
-	
-	signal(SIGINT, shutdown_all);
-	
+	char filter_exp[100];	/** The filter expression */
+	int rc;
+	struct mrp_listener_ctx *ctx = malloc(sizeof(struct mrp_listener_ctx));
+	struct mrp_domain_attr *class_a = malloc(sizeof(struct mrp_domain_attr));
+	struct mrp_domain_attr *class_b = malloc(sizeof(struct mrp_domain_attr));
+	ctx_sig = ctx;
+	signal(SIGINT, shutdown_and_exit);
+
 	int c;
-	while((c = getopt(argc, argv, "hi:")) > 0) 
+	while((c = getopt(argc, argv, "hi:")) > 0)
 	{
-		switch (c) 
+		switch (c)
 		{
-		case 'h': 
+		case 'h':
 			help();
 			break;
 		case 'i':
@@ -469,21 +336,57 @@ int main(int argc, char *argv[])
 		help();
 	}
 
-	if (create_socket()) {
-		fprintf(stderr, "Socket creation failed.\n");
-		return (errno);
+	rc = mrp_listener_client_init(ctx);
+	if (rc)
+	{
+		printf("failed to initialize global variables\n");
+		return EXIT_FAILURE;
 	}
 
-	send_process('D'); /** report domain status */
+	if (create_socket(ctx)) {
+		fprintf(stderr, "Socket creation failed.\n");
+		return errno;
+	}
 
-	init_jack();
-	
+	rc = mrp_monitor(ctx);
+	if (rc)
+	{
+		printf("failed creating MRP monitor thread\n");
+		return EXIT_FAILURE;
+	}
+	rc=mrp_get_domain(ctx, class_a, class_b);
+	if (rc)
+	{
+		printf("failed calling mrp_get_domain()\n");
+		return EXIT_FAILURE;
+	}
+
+	printf("detected domain Class A PRIO=%d VID=%04x...\n",class_a->priority,class_a->vid);
+
+	rc = report_domain_status(class_a,ctx);
+	if (rc) {
+		printf("report_domain_status failed\n");
+		return EXIT_FAILURE;
+	}
+
+	rc = join_vlan(class_a, ctx);
+	if (rc) {
+		printf("join_vlan failed\n");
+		return EXIT_FAILURE;
+	}
+
+	init_jack(ctx);
+
 	fprintf(stdout,"Waiting for talker...\n");
-	await_talker();	
+	await_talker(ctx);
 
-	send_process('R'); /** send_ready */
+	rc = send_ready(ctx);
+	if (rc) {
+		printf("send_ready failed\n");
+		return EXIT_FAILURE;
+	}
 
-#ifdef LIBSND
+#if LIBSND
 	char* filename = "listener.wav";
 	SF_INFO* sf_info = (SF_INFO*)malloc(sizeof(SF_INFO));
 
@@ -495,41 +398,41 @@ int main(int argc, char *argv[])
 
 	if (0 == sf_format_check(sf_info)) {
 		fprintf(stderr, "Wrong format.\n");
-		shutdown_all(0);
-		return -1;
+		shutdown_and_exit(0);
 	}
 
 	if (NULL == (snd_file = sf_open(filename, SFM_WRITE, sf_info))) {
 		fprintf(stderr, "Could not create file %s.\n", filename);
-		shutdown_all(0);
-		return -1;
+		shutdown_and_exit(0);
 	}
-#endif
+#endif /* LIBSND */
 
 	/** session, get session handler */
 	handle = pcap_open_live(dev, BUFSIZ, 1, -1, errbuf);
 	if (NULL == handle) {
 		fprintf(stderr, "Could not open device %s: %s.\n", dev, errbuf);
-		shutdown_all(0);
-		return -1;
+		shutdown_and_exit(0);
 	}
 
 	/** compile and apply filter */
+	sprintf(filter_exp,"ether dst %02x:%02x:%02x:%02x:%02x:%02x",ctx->dst_mac[0],ctx->dst_mac[1],ctx->dst_mac[2],ctx->dst_mac[3],ctx->dst_mac[4],ctx->dst_mac[5]);
 	if (-1 == pcap_compile(handle, &comp_filter_exp, filter_exp, 0, PCAP_NETMASK_UNKNOWN)) {
 		fprintf(stderr, "Could not parse filter %s: %s.\n", filter_exp, pcap_geterr(handle));
-		shutdown_all(0);
-		return -1;
+		shutdown_and_exit(0);
 	}
 
 	if (-1 == pcap_setfilter(handle, &comp_filter_exp)) {
 		fprintf(stderr, "Could not install filter %s: %s.\n", filter_exp, pcap_geterr(handle));
-		shutdown_all(0);
-		return -1;
+		shutdown_and_exit(0);
 	}
-	
+
 	/** loop forever and call callback-function for every received packet */
-	pcap_loop(handle, -1, pcap_callback, NULL);
+	pcap_loop(handle, -1, pcap_callback, (u_char*)ctx);
 
 	usleep(-1);
-	return 0;
+	free(ctx);
+	free(class_a);
+	free(class_b);
+
+	return EXIT_SUCCESS;
 }

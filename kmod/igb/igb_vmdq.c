@@ -1,7 +1,7 @@
 /*******************************************************************************
 
   Intel(R) Gigabit Ethernet Linux driver
-  Copyright(c) 2007-2013 Intel Corporation.
+  Copyright(c) 2007-2015 Intel Corporation.
 
   This program is free software; you can redistribute it and/or modify it
   under the terms and conditions of the GNU General Public License,
@@ -12,14 +12,11 @@
   FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License for
   more details.
 
-  You should have received a copy of the GNU General Public License along with
-  this program; if not, write to the Free Software Foundation, Inc.,
-  51 Franklin St - Fifth Floor, Boston, MA 02110-1301 USA.
-
   The full GNU General Public License is included in this distribution in
   the file called "COPYING".
 
   Contact Information:
+  Linux NICS <linux.nics@intel.com>
   e1000-devel Mailing List <e1000-devel@lists.sourceforge.net>
   Intel Corporation, 5200 N.E. Elam Young Parkway, Hillsboro, OR 97124-6497
 
@@ -83,26 +80,26 @@ netdev_tx_t igb_vmdq_xmit_frame(struct sk_buff *skb, struct net_device *dev)
 struct net_device_stats *igb_vmdq_get_stats(struct net_device *dev)
 {
 	struct igb_vmdq_adapter *vadapter = netdev_priv(dev);
-        struct igb_adapter *adapter = vadapter->real_adapter;
-        struct e1000_hw *hw = &adapter->hw;
+	struct igb_adapter *adapter = vadapter->real_adapter;
+	struct e1000_hw *hw = &adapter->hw;
 	int hw_queue = vadapter->rx_ring->queue_index +
 		       adapter->vfs_allocated_count;
 
 	vadapter->net_stats.rx_packets +=
 			E1000_READ_REG(hw, E1000_PFVFGPRC(hw_queue));
 	E1000_WRITE_REG(hw, E1000_PFVFGPRC(hw_queue), 0);
-        vadapter->net_stats.tx_packets +=
+	vadapter->net_stats.tx_packets +=
 			E1000_READ_REG(hw, E1000_PFVFGPTC(hw_queue));
-        E1000_WRITE_REG(hw, E1000_PFVFGPTC(hw_queue), 0);
-        vadapter->net_stats.rx_bytes +=
+	E1000_WRITE_REG(hw, E1000_PFVFGPTC(hw_queue), 0);
+	vadapter->net_stats.rx_bytes +=
 			E1000_READ_REG(hw, E1000_PFVFGORC(hw_queue));
-        E1000_WRITE_REG(hw, E1000_PFVFGORC(hw_queue), 0);
-        vadapter->net_stats.tx_bytes +=
+	E1000_WRITE_REG(hw, E1000_PFVFGORC(hw_queue), 0);
+	vadapter->net_stats.tx_bytes +=
 			E1000_READ_REG(hw, E1000_PFVFGOTC(hw_queue));
-        E1000_WRITE_REG(hw, E1000_PFVFGOTC(hw_queue), 0);
-        vadapter->net_stats.multicast +=
+	E1000_WRITE_REG(hw, E1000_PFVFGOTC(hw_queue), 0);
+	vadapter->net_stats.multicast +=
 			E1000_READ_REG(hw, E1000_PFVFMPRC(hw_queue));
-        E1000_WRITE_REG(hw, E1000_PFVFMPRC(hw_queue), 0);
+	E1000_WRITE_REG(hw, E1000_PFVFMPRC(hw_queue), 0);
 	/* only return the current stats */
 	return &vadapter->net_stats;
 }
@@ -119,7 +116,7 @@ struct net_device_stats *igb_vmdq_get_stats(struct net_device *dev)
 static int igb_write_vm_addr_list(struct net_device *netdev)
 {
 	struct igb_vmdq_adapter *vadapter = netdev_priv(netdev);
-        struct igb_adapter *adapter = vadapter->real_adapter;
+	struct igb_adapter *adapter = vadapter->real_adapter;
 	int count = 0;
 	int hw_queue = vadapter->rx_ring->queue_index +
 		       adapter->vfs_allocated_count;
@@ -153,8 +150,8 @@ static int igb_write_vm_addr_list(struct net_device *netdev)
 void igb_vmdq_set_rx_mode(struct net_device *dev)
 {
 	struct igb_vmdq_adapter *vadapter = netdev_priv(dev);
-        struct igb_adapter *adapter = vadapter->real_adapter;
-        struct e1000_hw *hw = &adapter->hw;
+	struct igb_adapter *adapter = vadapter->real_adapter;
+	struct e1000_hw *hw = &adapter->hw;
 	u32 vmolr, rctl;
 	int hw_queue = vadapter->rx_ring->queue_index +
 		       adapter->vfs_allocated_count;
@@ -205,7 +202,7 @@ int igb_vmdq_set_mac(struct net_device *dev, void *p)
 {
 	struct sockaddr *addr = p;
 	struct igb_vmdq_adapter *vadapter = netdev_priv(dev);
-        struct igb_adapter *adapter = vadapter->real_adapter;
+	struct igb_adapter *adapter = vadapter->real_adapter;
 	int hw_queue = vadapter->rx_ring->queue_index +
 		       adapter->vfs_allocated_count;
 
@@ -221,8 +218,7 @@ int igb_vmdq_change_mtu(struct net_device *dev, int new_mtu)
 
 	if (adapter->netdev->mtu < new_mtu) {
 		DPRINTK(PROBE, INFO,
-			"Set MTU on %s to >= %d "
-			"before changing MTU on %s\n",
+			"Set MTU on %s to >= %d before changing MTU on %s\n",
 			adapter->netdev->name, new_mtu, dev->name);
 		return -EINVAL;
 	}
@@ -337,11 +333,11 @@ static int igb_vmdq_get_settings(struct net_device *netdev,
 
 		if ((status & E1000_STATUS_SPEED_1000) ||
 		    hw->phy.media_type != e1000_media_type_copper)
-			ecmd->speed = SPEED_1000;
+			ethtool_cmd_speed_set(ecmd, SPEED_1000);
 		else if (status & E1000_STATUS_SPEED_100)
-			ecmd->speed = SPEED_100;
+			ethtool_cmd_speed_set(ecmd, SPEED_100);
 		else
-			ecmd->speed = SPEED_10;
+			ethtool_cmd_speed_set(ecmd, SPEED_10);
 
 		if ((status & E1000_STATUS_FD) ||
 		    hw->phy.media_type != e1000_media_type_copper)
@@ -349,7 +345,7 @@ static int igb_vmdq_get_settings(struct net_device *netdev,
 		else
 			ecmd->duplex = DUPLEX_HALF;
 	} else {
-		ecmd->speed = -1;
+		ethtool_cmd_speed_set(ecmd, SPEED_UNKNOWN);
 		ecmd->duplex = -1;
 	}
 

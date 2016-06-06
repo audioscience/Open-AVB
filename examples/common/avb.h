@@ -98,12 +98,14 @@ typedef struct __attribute__ ((packed)) {
 	uint8_t h_protocol[2];
 } eth_header;
 
+typedef long double FrequencyRatio;
+
 typedef struct { 
 	int64_t ml_phoffset;
 	int64_t ls_phoffset;
-	int32_t ml_freqoffset;
-	int32_t ls_freqoffset;
-	int64_t local_time;
+	FrequencyRatio ml_freqoffset;
+	FrequencyRatio ls_freqoffset;
+	uint64_t local_time;
 } gPtpTimeData;
 
 typedef enum { false = 0, true = 1 } bool;
@@ -112,9 +114,11 @@ int pci_connect(device_t * igb_dev);
 
 int gptpscaling(gPtpTimeData * td, char *memory_offset_buffer);
 
+bool gptplocaltime(const gPtpTimeData * td, uint64_t* now_local);
+
 void gptpdeinit(int shm_fd, char *memory_offset_buffer);
 
-int gptpinit(int *shm_fd, char *memory_offset_buffer);
+int gptpinit(int *shm_fd, char **memory_offset_buffer);
 
 void avb_set_1722_cd_indicator(seventeen22_header *h1722, uint64_t cd_indicator);
 uint64_t avb_get_1722_cd_indicator(seventeen22_header *h1722);
