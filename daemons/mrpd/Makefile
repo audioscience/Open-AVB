@@ -3,7 +3,7 @@ OPT=-O2
 CFLAGS=$(OPT) -Wall -Wextra -Wno-parentheses -ggdb -D_GNU_SOURCE
 
 ifeq ($(ARCH),arm)
-CC?=arm-none-linux-gnueabi-gcc
+CC=arm-none-linux-gnueabi-gcc
 else
 CC?=gcc
 endif
@@ -20,7 +20,7 @@ mrpctl: mrpctl.o ../../examples/mrp_client/mrpdclient.o
 ../../examples/mrp_client/mrpdclient.o: \
 	../../examples/mrp_client/mrpdclient.c \
 	../../examples/mrp_client/mrpdclient.h
-	make -C ../../examples/mrp_client/ mrpdclient.o
+	make -C ../../examples/mrp_client/
 
 %.o: %.c
 	$(CC) -c $(INCFLAGS) $(CFLAGS) -o $@  $<
@@ -30,6 +30,7 @@ mrpctl: mrpctl.o ../../examples/mrp_client/mrpdclient.o
 clean:
 	rm -f `find . -name "*~" -o -name "*.[oa]" -o -name "\#*\#" -o -name TAGS -o -name core -o -name "*.orig"`
 	rm -f mrpd mrpctl
+	make -C ../../examples/mrp_client/ clean
 
 indent:
 	indent --linux-style mrpd.c mrpd.h mvrp.c mvrp.h msrp.c msrp.h mmrp.c mmrp.h mrp.c mrp.h \
