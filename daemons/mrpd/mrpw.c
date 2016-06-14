@@ -414,7 +414,7 @@ int gctimer_start()
 	return mrpd_timer_start(gc_timer, 30 * 60 * 1000);
 }
 
-int periodictimer_start()
+int mrp_periodictimer_start()
 {
 	/* periodictimer has expired. (10.7.5.23)
 	 * PeriodicTransmission state machine generates periodic events
@@ -423,7 +423,7 @@ int periodictimer_start()
 	return mrpd_timer_start_interval(periodic_timer, 1000, 1000);
 }
 
-int periodictimer_stop()
+int mrp_periodictimer_stop()
 {
 	/* periodictimer has expired. (10.7.5.23)
 	 * PeriodicTransmission state machine generates periodic events
@@ -472,7 +472,7 @@ int init_timers(void)
 	gctimer_start();
 
 	if (periodic_enable)
-		periodictimer_start();
+		mrp_periodictimer_start();
 
 	return 0;
  out:
@@ -957,7 +957,7 @@ int mrpw_init_protocols(void)
 	}
 
 	if (msrp_enable) {
-		rc = msrp_init(msrp_enable);
+		rc = msrp_init(msrp_enable, MSRP_INTERESTING_STREAM_ID_COUNT, 0);
 		if (rc)
 			goto out;
 	}

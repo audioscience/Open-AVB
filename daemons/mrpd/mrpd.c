@@ -70,6 +70,7 @@ int daemonize;
 int mmrp_enable;
 int mvrp_enable;
 int msrp_enable;
+int msrp_pruning;
 int logging_enable;
 int mrpd_port;
 char *uds_socket;
@@ -260,8 +261,12 @@ int init_local_udp_ctl(void)
 
 	rc = bind(sock_fd, (struct sockaddr_in*)&addr, addr_len);
 
-	if (rc < 0)
+	if (rc < 0) {
+#if LOG_ERRORS
+		fprintf(stderr, "%s - Error on bind %s", __FUNCTION__, strerror(errno));
+#endif
 		goto out;
+	}
 
 	control_socket = sock_fd;
 
@@ -556,7 +561,7 @@ mrpd_init_protocol_socket(u_int16_t etype, int *sock,
 
 	memset(&if_request, 0, sizeof(if_request));
 
-	strncpy(if_request.ifr_name, interface, sizeof(if_request.ifr_name));
+	strncpy(if_request.ifr_name, interface, sizeof(if_request.ifr_name) - 1);
 
 	rc = ioctl(lsock, SIOCGIFHWADDR, &if_request);
 	if (rc < 0) {
@@ -569,7 +574,7 @@ mrpd_init_protocol_socket(u_int16_t etype, int *sock,
 
 	memset(&if_request, 0, sizeof(if_request));
 
-	strncpy(if_request.ifr_name, interface, sizeof(if_request.ifr_name));
+	strncpy(if_request.ifr_name, interface, sizeof(if_request.ifr_name)-1);
 
 	rc = ioctl(lsock, SIOCGIFINDEX, &if_request);
 	if (rc < 0) {
@@ -584,6 +589,9 @@ mrpd_init_protocol_socket(u_int16_t etype, int *sock,
 
 	rc = bind(lsock, (struct sockaddr *)&addr, sizeof(addr));
 	if (0 != rc) {
+#if LOG_ERRORS
+		fprintf(stderr, "%s - Error on bind %s", __FUNCTION__, strerror(errno));
+#endif
 		close(lsock);
 		return -1;
 	}
@@ -924,8 +932,9 @@ int main(int argc, char *argv[])
 	mmrp_enable = 0;
 	mvrp_enable = 0;
 	msrp_enable = 0;
+	msrp_pruning = 0;
 	logging_enable = 0;
-	mrpd_port = 0;
+	mrpd_port = MRPD_PORT_DEFAULT;
 	interface = NULL;
 	uds_socket = NULL;
 	interface_fd = -1;
@@ -954,6 +963,9 @@ int main(int argc, char *argv[])
 			break;
 		case 's':
 			msrp_enable = 1;
+			break;
+		case 'p':
+			msrp_pruning = 1;
 			break;
 		case 'l':
 			logging_enable = 1;
@@ -1018,7 +1030,7 @@ int main(int argc, char *argv[])
 		goto out;
 	}
 
-	rc = msrp_init(msrp_enable);
+	rc = msrp_init(msrp_enable, MSRP_INTERESTING_STREAM_ID_COUNT, msrp_pruning);
 	if (rc) {
 		printf("msrp_enable failed\n");
 		goto out;

@@ -37,6 +37,7 @@
 #include <stdio.h>
 #include <stddef.h>
 #include <string.h>
+#include <errno.h>
 
 #include "parse.h"
 #include "mrpd.h"
@@ -44,10 +45,18 @@
 #include "msrp.h"
 #include "mmrp.h"
 
+/*
+ * Defines related to parsing command strings from an external mrpd client.
+ */
+#define MSRP_CLIENT_CMDSTR_HEADER_LEN (4)  /* "S+L=" part of a comamnd string */
+#define MSRP_CLIENT_CMDSTR_STREAMID_LEN (16)  /* "DEADBEEFDEADBEEF" uint64_t encoded as hex in a cmd string */
+
 int msrp_txpdu(void);
 static struct msrp_attribute *msrp_alloc(void);
 int msrp_send_notifications(struct msrp_attribute *attrib, int notify);
 static struct msrp_attribute *msrp_conditional_reclaim(struct msrp_attribute *sattrib);
+
+int msrp_event(int event, struct msrp_attribute *rattrib);
 
 unsigned char MSRP_ADDR[] = { 0x01, 0x80, 0xC2, 0x00, 0x00, 0x0E };
 
@@ -57,7 +66,7 @@ extern unsigned char STATION_ADDR[];
 SOCKET msrp_socket;
 struct msrp_database *MSRP_db;
 
-static char *msrp_attrib_type_string(int t)
+char *msrp_attrib_type_string(int t)
 {
 	switch (t) {
 	case MSRP_TALKER_ADV_TYPE:
@@ -115,6 +124,24 @@ void msrp_print_debug_info(int evt, const struct msrp_attribute *attrib)
 }
 #endif
 
+int msrp_count_type(int attrib_type)
+{
+	int count = 0;
+	struct msrp_attribute *attrib;
+
+	if (MSRP_db) {
+		attrib = MSRP_db->attrib_list;
+		while (NULL != attrib) {
+			if (attrib_type == attrib->type) {
+				count++;
+			}
+			attrib = attrib->next;
+		}
+	}
+	return count;
+}
+
+
 struct msrp_attribute *msrp_lookup(struct msrp_attribute *rattrib)
 {
 	struct msrp_attribute *attrib;
@@ -145,7 +172,23 @@ struct msrp_attribute *msrp_lookup(struct msrp_attribute *rattrib)
 	}
 	return NULL;
 }
+#ifdef MRP_CPPUTEST /* MSRP_PDU_TEST */
+struct msrp_attribute *msrp_lookup_stream_declaration(uint32_t decl_type, uint8_t streamID[8])
+{
+	struct msrp_attribute *attrib;
+	struct msrp_attribute *found_attrib;
 
+	attrib = msrp_alloc();
+	if (NULL == attrib) {
+		return NULL;
+	}
+	attrib->type = decl_type;
+	memcpy(attrib->attribute.talk_listen.StreamID, streamID, 8);
+	found_attrib = msrp_lookup(attrib);
+	free(attrib);
+	return found_attrib;
+}
+#endif
 int msrp_add(struct msrp_attribute *rattrib)
 {
 	struct msrp_attribute *attrib;
@@ -367,11 +410,24 @@ int msrp_merge(struct msrp_attribute *rattrib)
 	return 0;
 }
 
+#ifdef MRP_CPPUTEST /* MSRP_PDU_TEST */
+int msrp_event_orig(int event, struct msrp_attribute *rattrib)
+#else
 int msrp_event(int event, struct msrp_attribute *rattrib)
+#endif
 {
 	struct msrp_attribute *attrib;
 	int count = 0;
 	int rc;
+	int is_talker_attrib = 0;
+	int interested = 1;
+
+	if (NULL != rattrib) {
+		/* only check talker attributes as listener attributes are filtered by the AVB switch (802.1Q 2011, 35.2.4.4) */
+		if (rattrib->type == MSRP_TALKER_ADV_TYPE || rattrib->type == MSRP_TALKER_FAILED_TYPE ) {
+			is_talker_attrib = 1;
+		}
+	}
 
 	switch (event) {
 	case MRP_EVENT_LVATIMER:
@@ -491,61 +547,88 @@ int msrp_event(int event, struct msrp_attribute *rattrib)
 	case MRP_EVENT_RIN:
 	case MRP_EVENT_RMT:
 	case MRP_EVENT_RLV:
-		mrp_jointimer_start(&(MSRP_db->mrp_db));
 		if (NULL == rattrib)
 			return -1;	/* XXX internal fault */
 
-		/* update state */
-		attrib = msrp_lookup(rattrib);
+		/* are we interested? Assume yes */
+		interested=1;
 
-		if (NULL == attrib) {
-			msrp_add(rattrib);
-			attrib = rattrib;
-		} else {
-			msrp_merge(rattrib);
-			free(rattrib);
-		}
+		if( is_talker_attrib && MSRP_db->enable_pruning_of_uninteresting_ids ) {
+			struct msrp_attribute listener_lookup = *rattrib;
 
-		mrp_applicant_fsm(&(MSRP_db->mrp_db), &(attrib->applicant),
-				  event,
-				  mrp_registrar_in(&(attrib->registrar)));
+			/*
+			 * Having a matching listener declaration in the MSRP database automatically
+			 * makes this ID interesting.
+			 */
+			listener_lookup.type = MSRP_LISTENER_TYPE;
 
-		/* remap local requests into registrar events */
-		switch (event) {
-		case MRP_EVENT_NEW:
-			mrp_registrar_fsm(&(attrib->registrar),
-					  &(MSRP_db->mrp_db), MRP_EVENT_BEGIN);
-			attrib->registrar.notify = MRP_NOTIFY_NEW;
-			break;
-		case MRP_EVENT_JOIN:
-			if (MRP_IN_STATE == attrib->registrar.mrp_state)
-				mrp_registrar_fsm(&(attrib->registrar),
-						  &(MSRP_db->mrp_db),
-						  MRP_EVENT_RJOININ);
-			else
-				mrp_registrar_fsm(&(attrib->registrar),
-						  &(MSRP_db->mrp_db),
-						  MRP_EVENT_RJOINMT);
-			break;
-		case MRP_EVENT_LV:
-			mrp_registrar_fsm(&(attrib->registrar),
-					  &(MSRP_db->mrp_db), MRP_EVENT_RLV);
-			break;
-		default:
-			rc = mrp_registrar_fsm(&(attrib->registrar),
-					       &(MSRP_db->mrp_db), event);
-			if (-1 == rc) {
-				printf
-				    ("MSRP registrar error on attrib->type = %s (%d)\n",
-				     msrp_attrib_type_string(attrib->type),
-				     attrib->type);
+			/* check for uninteresting stream IDs */
+			if ((eui64set_find(&MSRP_db->interesting_stream_ids,
+					  eui64_read(rattrib->attribute.talk_listen.StreamID)) == 0)
+								&&
+				(msrp_lookup(&listener_lookup) == 0)) {
+				
+				/* Not interested in this talker's stream id */
+				interested = 0;
 			}
-			break;
 		}
-		msrp_conditional_reclaim(attrib);
+
+		if( interested ) {
+			/* only start a join timer if we are interested */
+			mrp_jointimer_start(&(MSRP_db->mrp_db));
+
+			/* update state */
+			attrib = msrp_lookup(rattrib);
+
+			if (NULL == attrib) {
+				msrp_add(rattrib);
+				attrib = rattrib;
+			} else {
+				msrp_merge(rattrib);
+				free(rattrib);
+			}
+
+			mrp_applicant_fsm(&(MSRP_db->mrp_db), &(attrib->applicant),
+					  event,
+					  mrp_registrar_in(&(attrib->registrar)));
+
+			/* remap local requests into registrar events */
+			switch (event) {
+			case MRP_EVENT_NEW:
+				mrp_registrar_fsm(&(attrib->registrar),
+						  &(MSRP_db->mrp_db), MRP_EVENT_BEGIN);
+				attrib->registrar.notify = MRP_NOTIFY_NEW;
+				break;
+			case MRP_EVENT_JOIN:
+				if (MRP_IN_STATE == attrib->registrar.mrp_state)
+					mrp_registrar_fsm(&(attrib->registrar),
+							  &(MSRP_db->mrp_db),
+							  MRP_EVENT_RJOININ);
+				else
+					mrp_registrar_fsm(&(attrib->registrar),
+							  &(MSRP_db->mrp_db),
+							  MRP_EVENT_RJOINMT);
+				break;
+			case MRP_EVENT_LV:
+				mrp_registrar_fsm(&(attrib->registrar),
+						  &(MSRP_db->mrp_db), MRP_EVENT_RLV);
+				break;
+			default:
+				rc = mrp_registrar_fsm(&(attrib->registrar),
+						       &(MSRP_db->mrp_db), event);
+				if (-1 == rc) {
+					printf
+					    ("MSRP registrar error on attrib->type = %s (%d)\n",
+					     msrp_attrib_type_string(attrib->type),
+					     attrib->type);
+				}
+				break;
+			}
+			msrp_conditional_reclaim(attrib);
 #if LOG_MSRP
-		msrp_print_debug_info(event, attrib);
+			msrp_print_debug_info(event, attrib);
 #endif
+		}
 
 		break;
 	default:
@@ -1816,9 +1899,11 @@ int msrp_recv_msg()
 			 * we can seek for an endmark to recover .. but this version
 			 * dumps the entire packet as malformed
 			 */
+#if LOG_MSRP
 			printf
 			    ("################## unrecognized attribute type (%d)\n",
 			     mrpdu_msg->AttributeType);
+#endif
 			goto out;
 		}
 	}
@@ -2185,7 +2270,7 @@ msrp_emit_talkervectors(unsigned char *msgbuf, unsigned char *msgbuf_eof,
 
 	mrpdu_vectorptr = (mrpdu_vectorattrib_t *) & (mrpdu_msg->Data[2]);
 
-	while ((mrpdu_msg_ptr < (mrpdu_msg_eof - 2)) && (NULL != attrib)) {
+	while ((mrpdu_msg_ptr < (mrpdu_msg_eof - vector_size - MRPDU_ENDMARK_SZ)) && (NULL != attrib)) {
 
 		if (type != attrib->type) {
 			attrib = attrib->next;
@@ -2201,8 +2286,8 @@ msrp_emit_talkervectors(unsigned char *msgbuf, unsigned char *msgbuf_eof,
 			attrib = attrib->next;
 			continue;
 		}
+		attrib->applicant.tx = 0;
 		if (MRP_ENCODE_OPTIONAL == attrib->applicant.encode) {
-			attrib->applicant.tx = 0;
 			attrib = attrib->next;
 			continue;
 		}
@@ -2894,7 +2979,7 @@ int msrp_txpdu(void)
 	}
 
 	/* endmark */
-	if (mrpdu_msg_ptr < (mrpdu_msg_eof - 2)) {
+	if (mrpdu_msg_ptr < (mrpdu_msg_eof - MRPDU_ENDMARK_SZ)) {
 		*mrpdu_msg_ptr = 0;
 		mrpdu_msg_ptr++;
 		*mrpdu_msg_ptr = 0;
@@ -2908,8 +2993,12 @@ int msrp_txpdu(void)
 #if LOG_MSRP
 	mrpd_log_printf("MSRP send PDU\n");
 #endif
-	if (bytes <= 0)
+	if (bytes <= 0) {
+#if LOG_ERRORS
+		fprintf(stderr, "%s - Error on send %s", __FUNCTION__, strerror(errno));
+#endif
 		goto out;
+	}
 
 	free(msgbuf);
 	return 0;
@@ -3235,9 +3324,24 @@ int msrp_dumptable(struct client_s *client)
 
 }
 
+static int msrp_cmd_parse_stream_id(const char *buf, int buflen,
+                                    uint8_t *stream_id,
+				    int *err_index )
+{
+	struct parse_param specs[] = {
+		{"S" PARSE_ASSIGN, parse_c64, stream_id },
+		{0, parse_null, 0 }
+	};
+	if (buflen < MSRP_CLIENT_CMDSTR_STREAMID_LEN + MSRP_CLIENT_CMDSTR_HEADER_LEN)
+		return -1;
+	return parse(buf + MSRP_CLIENT_CMDSTR_HEADER_LEN,
+		buflen - MSRP_CLIENT_CMDSTR_HEADER_LEN, specs, err_index);
+}
+
+
 /* S+? - (re)JOIN a stream */
 /* S++ - NEW a stream      */
-static int msrp_cmd_parse_join_or_new_stream(char *buf, int buflen,
+static int msrp_cmd_parse_join_or_new_stream(const char *buf, int buflen,
 					     struct msrpdu_talker_fail
 					     *talker_ad, int *err_index)
 {
@@ -3260,7 +3364,7 @@ static int msrp_cmd_parse_join_or_new_stream(char *buf, int buflen,
 	return parse(buf + 4, buflen - 4, specs, err_index);
 }
 
-static int msrp_cmd_parse_join_or_new_stream_failure(char *buf, int buflen,
+static int msrp_cmd_parse_join_or_new_stream_failure(const char *buf, int buflen,
 					     struct msrpdu_talker_fail
 					     *talker_ad, int *err_index)
 {
@@ -3318,7 +3422,7 @@ static int msrp_cmd_join_or_new_stream(struct msrpdu_talker_fail *talker_ad,
 }
 
 /* S-- - LV a stream */
-static int msrp_cmd_parse_leave_stream(char *buf, int buflen,
+static int msrp_cmd_parse_leave_stream(const char *buf, int buflen,
 				       struct msrpdu_talker_fail *talker_ad,
 				       int *err_index)
 {
@@ -3348,7 +3452,7 @@ static int msrp_cmd_leave_stream(struct msrpdu_talker_fail *talker_ad)
 }
 
 /* S+L   Report a listener status */
-static int msrp_cmd_parse_report_listener_status(char *buf, int buflen,
+static int msrp_cmd_parse_report_listener_status(const char *buf, int buflen,
 						 struct msrpdu_talker_fail
 						 *talker_ad,
 						 uint32_t * substate,
@@ -3384,7 +3488,7 @@ static int msrp_cmd_report_listener_status(struct msrpdu_talker_fail *talker_ad,
 }
 
 /* S-L   Withdraw a listener status */
-static int msrp_cmd_parse_withdraw_listener_status(char *buf, int buflen, struct msrpdu_talker_fail
+static int msrp_cmd_parse_withdraw_listener_status(const char *buf, int buflen, struct msrpdu_talker_fail
 						   *talker_ad, int *err_index)
 {
 	struct parse_param specs[] = {
@@ -3422,7 +3526,7 @@ static int msrp_cmd_withdraw_listener_status(struct msrpdu_talker_fail
 
 /* S+D   Report a domain status */
 /* S-D   Withdraw a domain status */
-static int msrp_cmd_parse_domain_status(char *buf, int buflen,
+static int msrp_cmd_parse_domain_status(const char *buf, int buflen,
 					struct msrpdu_domain *domain,
 					int *err_index)
 {
@@ -3461,10 +3565,10 @@ static int msrp_cmd_report_domain_status(struct msrpdu_domain *domain,
 	return 0;
 }
 
-int msrp_recv_cmd(char *buf, int buflen, struct client_s *client)
+int msrp_recv_cmd(const char *buf, int buflen, struct client_s *client)
 {
 	int rc;
-	char respbuf[12];
+	char respbuf[64];
 	int mrp_event;
 	unsigned int substate;
 	struct msrpdu_domain domain_param;
@@ -3480,10 +3584,22 @@ int msrp_recv_cmd(char *buf, int buflen, struct client_s *client)
 
 	rc = mrp_client_add(&(MSRP_db->mrp_db.clients), &client->addr.sa);
 
+	/*
+	* If pruning of MSRP streamIDs is enabled, only support a single client.
+	*/
+	if (MSRP_db->enable_pruning_of_uninteresting_ids) {
+		if (mrp_client_count(MSRP_db->mrp_db.clients) > 1) {
+			mrp_client_delete(&(MSRP_db->mrp_db.clients), client);
+			mrpd_send_ctl_msg(client, "ERR pruning enabled too many clients\n", sizeof("ERR pruning enabled too many clients\n") + 1);
+			goto out;
+		}
+	}
+
+
 	if (buflen < 3)
 		return -1;
 
-	if ('S' != buf[0])
+	if (('S' != buf[0]) && ('I' != buf[0]))
 		return -1;
 
 	/*
@@ -3495,6 +3611,9 @@ int msrp_recv_cmd(char *buf, int buflen, struct client_s *client)
 	 * S-L   Withdraw a listener status
 	 * S+D   Report a domain status
 	 * S-D   Withdraw a domain status
+	 * I+S   Add a stream id to the talker stream id list
+	 * I-S   Remove a stream id from the talker stream id list
+	 * I-A   Remove all stream ids from the interesting talker and listener stream id lists
 	 */
 
 	if (strncmp(buf, "S??", 3) == 0) {
@@ -3511,6 +3630,33 @@ int msrp_recv_cmd(char *buf, int buflen, struct client_s *client)
 		rc = msrp_cmd_withdraw_listener_status(&talker_param);
 		if (rc)
 			goto out_ERI;	/* oops - internal error */
+
+		/*
+		 * If pruning is enabled and the streamID is not in the
+		 * "interesting" ID database, remove any TalkerAdvertise
+		 * or TalkerFailed declarations.
+		 */
+		if (MSRP_db->enable_pruning_of_uninteresting_ids &&
+			!eui64set_find(&MSRP_db->interesting_stream_ids, eui64_read(talker_param.StreamID))) {
+			struct msrp_attribute *attrib;
+			attrib = MSRP_db->attrib_list;
+			while (NULL != attrib) {
+				struct msrp_attribute *free_sattrib = attrib;
+				attrib = attrib->next;
+				if (((free_sattrib->type == MSRP_TALKER_ADV_TYPE) ||
+					(free_sattrib->type == MSRP_TALKER_FAILED_TYPE)) &&
+					(memcmp(free_sattrib->attribute.talk_listen.StreamID, talker_param.StreamID, sizeof(talker_param.StreamID)) == 0)) {
+					if (NULL != free_sattrib->prev)
+						free_sattrib->prev->next = free_sattrib->next;
+					else
+						MSRP_db->attrib_list = free_sattrib->next;
+					if (NULL != free_sattrib->next)
+						free_sattrib->next->prev = free_sattrib->prev;
+					/* delete attribute */
+					free(free_sattrib);
+				}
+			}
+		}
 	} else if (strncmp(buf, "S-D", 3) == 0) {
 
 		/* buf[] should look similar to 'S-D:C=%d,P=%d,V:%04x" */
@@ -3596,6 +3742,61 @@ int msrp_recv_cmd(char *buf, int buflen, struct client_s *client)
 		rc = msrp_cmd_join_or_new_stream(&talker_param, attrib_type, mrp_event);
 		if (rc)
 			goto out_ERI;	/* oops - internal error */
+	} else if (strncmp(buf, "I+S", 3 ) == 0 ) {
+		/* Add a stream id to the interesting stream id list */
+		uint8_t stream_id[8];
+
+		if (!MSRP_db->enable_pruning_of_uninteresting_ids)
+			goto out_ERP;
+
+		rc=msrp_cmd_parse_stream_id(buf,buflen,stream_id,&err_index);
+		if (rc)
+			goto out_ERP;
+		/* return error if duplicate */
+		if (eui64set_find(&MSRP_db->interesting_stream_ids, eui64_read(stream_id)))
+			goto out_ERI;
+		if( eui64set_insert_and_sort( &MSRP_db->interesting_stream_ids, eui64_read(stream_id), 0 )==0 )
+			goto out_ERI;
+	} else if (strncmp(buf, "I-S", 3 ) == 0 ) {
+		/* Remove a stream id from the interesting stream id list */
+		struct msrp_attribute listener_lookup;
+		uint8_t stream_id[8];
+
+		if (!MSRP_db->enable_pruning_of_uninteresting_ids)
+			goto out_ERP;
+
+		rc = msrp_cmd_parse_stream_id(buf, buflen, stream_id, &err_index);
+		if (rc)
+			goto out_ERP;
+		if( eui64set_remove_and_sort( &MSRP_db->interesting_stream_ids, eui64_read(stream_id) )==0 )
+			goto out_ERI;
+
+		/* if there is no matching listener, "I-S" removes any TA of TF attributes from the database */
+		listener_lookup.type = MSRP_LISTENER_TYPE;
+		memcpy(listener_lookup.attribute.talk_listen.StreamID, stream_id, sizeof(stream_id));
+		if (msrp_lookup(&listener_lookup) == 0) {
+			struct msrp_attribute *attrib;
+			attrib = MSRP_db->attrib_list;
+			while (NULL != attrib) {
+				struct msrp_attribute *free_sattrib = attrib;
+				attrib = attrib->next;
+				if (((free_sattrib->type == MSRP_TALKER_ADV_TYPE) ||
+					 (free_sattrib->type == MSRP_TALKER_FAILED_TYPE)) &&
+					 (memcmp(free_sattrib->attribute.talk_listen.StreamID, stream_id, sizeof(stream_id)) == 0)) {
+						if (NULL != free_sattrib->prev)
+							free_sattrib->prev->next = free_sattrib->next;
+						else
+							MSRP_db->attrib_list = free_sattrib->next;
+						if (NULL != free_sattrib->next)
+							free_sattrib->next->prev = free_sattrib->prev;
+						/* delete attribute */
+						free(free_sattrib);
+				}
+			}
+		}
+	} else if (strncmp(buf, "I-A", 3 ) == 0 ) {
+		/* Remove all stream ids from the interesting stream id lists */
+		eui64set_clear( &MSRP_db->interesting_stream_ids );
 	} else {
 		snprintf(respbuf, sizeof(respbuf) - 1, "ERC MSRP %s", buf);
 		mrpd_send_ctl_msg(client, respbuf, sizeof(respbuf));
@@ -3617,7 +3818,7 @@ int msrp_recv_cmd(char *buf, int buflen, struct client_s *client)
 	return -1;
 }
 
-int msrp_init(int msrp_enable)
+int msrp_init(int msrp_enable, int max_interesting_stream_ids, int enable_pruning)
 {
 	int rc;
 
@@ -3639,7 +3840,17 @@ int msrp_init(int msrp_enable)
 	if (NULL == MSRP_db)
 		goto abort_socket;
 
+	if( max_interesting_stream_ids < 8 ) {
+		/* Allow minimum of 8 interesting talker stream ids */
+		max_interesting_stream_ids = 8;
+	}
+
 	memset(MSRP_db, 0, sizeof(struct msrp_database));
+
+	if( eui64set_init(&MSRP_db->interesting_stream_ids, max_interesting_stream_ids ) < 0 )
+		goto abort_alloc;
+
+	MSRP_db->enable_pruning_of_uninteresting_ids = enable_pruning;
 
 	/* if registration is FIXED or FORBIDDEN
 	 * updates from MRP are discarded, and
@@ -3672,6 +3883,32 @@ int msrp_init(int msrp_enable)
 	msrp_socket = INVALID_SOCKET;
 	/* XXX */
 	return -1;
+}
+
+void msrp_reset(void)
+{
+	struct msrp_attribute *free_sattrib;
+	struct msrp_attribute *sattrib;
+
+	if (NULL == MSRP_db)
+		return;
+
+	sattrib = MSRP_db->attrib_list;
+	while (NULL != sattrib) {
+		free_sattrib = sattrib;
+		sattrib = sattrib->next;
+		free(free_sattrib);
+   	}
+	eui64set_free(&MSRP_db->interesting_stream_ids);
+	free(MSRP_db);
+}
+
+int msrp_interesting_id_count(void)
+{
+	if (NULL != MSRP_db)
+		return eui64set_num_entries(&MSRP_db->interesting_stream_ids);
+	else
+		return 0;
 }
 
 void msrp_bye(struct client_s *client)

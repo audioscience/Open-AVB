@@ -37,6 +37,7 @@
 #include <stdio.h>
 #include <stddef.h>
 #include <string.h>
+#include <errno.h>
 
 #include "parse.h"
 #include "mrpd.h"
@@ -833,8 +834,8 @@ mmrp_emit_svcvectors(unsigned char *msgbuf, unsigned char *msgbuf_eof,
 			attrib = attrib->next;
 			continue;
 		}
+		attrib->applicant.tx = 0;
 		if (MRP_ENCODE_OPTIONAL == attrib->applicant.encode) {
-			attrib->applicant.tx = 0;
 			attrib = attrib->next;
 			continue;
 		}
@@ -1076,8 +1077,8 @@ mmrp_emit_macvectors(unsigned char *msgbuf, unsigned char *msgbuf_eof,
 			attrib = attrib->next;
 			continue;
 		}
+		attrib->applicant.tx = 0;
 		if (MRP_ENCODE_OPTIONAL == attrib->applicant.encode) {
-			attrib->applicant.tx = 0;
 			attrib = attrib->next;
 			continue;
 		}
@@ -1384,8 +1385,12 @@ int mmrp_txpdu(void)
 #if LOG_MMRP
 	mrpd_log_printf("MMRP send PDU\n");
 #endif
-	if (bytes <= 0)
+	if (bytes <= 0) {
+#if LOG_ERRORS
+		fprintf(stderr, "%s - Error on send %s", __FUNCTION__, strerror(errno));
+#endif
 		goto out;
+	}
 
 	free(msgbuf);
 	return 0;
