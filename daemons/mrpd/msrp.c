@@ -3589,7 +3589,7 @@ int msrp_recv_cmd(const char *buf, int buflen, struct client_s *client)
 	*/
 	if (MSRP_db->enable_pruning_of_uninteresting_ids) {
 		if (mrp_client_count(MSRP_db->mrp_db.clients) > 1) {
-			mrp_client_delete(&(MSRP_db->mrp_db.clients), client);
+			mrp_client_delete(&(MSRP_db->mrp_db.clients), &client->addr.sa);
 			mrpd_send_ctl_msg(client, "ERR pruning enabled too many clients\n", sizeof("ERR pruning enabled too many clients\n") + 1);
 			goto out;
 		}
