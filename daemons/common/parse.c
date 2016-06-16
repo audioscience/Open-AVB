@@ -80,7 +80,7 @@ int parse(const char *s, int len, struct parse_param *specs, int *err_index)
 	parse_log("PARSE: %s\n", s);
 
 	while (specs->name && !err) {
-		param = strstr(s, specs->name);
+		param = (char *)strstr(s, specs->name);
 		if (NULL == param) {
 			*err_index = count + 1;
 			parse_log("PARSE: ERROR - could not find %s\n",
