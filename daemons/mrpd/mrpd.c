@@ -460,6 +460,7 @@ int process_ctl_msg(char *buf, int buflen, struct client_s *client)
 		return mvrp_recv_cmd(buf, buflen, client);
 		break;
 	case 'S':
+	case 'I':
 		return msrp_recv_cmd(buf, buflen, client);
 		break;
 	case 'B':
