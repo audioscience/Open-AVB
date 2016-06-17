@@ -161,7 +161,7 @@ const struct eui64set_entry *eui64set_find(const struct eui64set *self,
 	struct eui64set_entry key;
 	key.eui64 = value;
 	key.p = 0;
-	result = bsearch(&key,
+	result = (const struct eui64set_entry *)bsearch(&key,
 			 self->storage,
 			 self->num_entries, sizeof(key), eui64set_compare);
 	return result;
@@ -174,7 +174,7 @@ int eui64set_remove_and_sort(struct eui64set *self, uint64_t value)
 	struct eui64set_entry key;
 	key.eui64 = value;
 	key.p = 0;
-	item = bsearch(&key,
+	item = (struct eui64set_entry *)bsearch(&key,
 		       self->storage,
 		       self->num_entries, sizeof(key), eui64set_compare);
 	if (item) {
