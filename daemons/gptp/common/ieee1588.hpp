@@ -125,6 +125,16 @@ class ClockIdentity {
 		memcpy(this->id, id, PTP_CLOCK_IDENTITY_LENGTH);
 	}
 	void set(LinkLayerAddress * address);
+	uint64_t get64(void) {
+		return ((uint64_t)id[0] << 56) |
+			((uint64_t)id[1] << 48) |
+			((uint64_t)id[2] << 40) |
+			((uint64_t)id[3] << 32) |
+			((uint64_t)id[4] << 24) |
+			((uint64_t)id[5] << 16) |
+			((uint64_t)id[6] << 8) |
+			((uint64_t)id[7] << 0);
+	}
 	void print(const char *str) {
 		XPTPD_INFO
 			( "Clock Identity(%s): %02hhx %02hhx %02hhx %02hhx %02hhx %02hhx %02hhx %02hhx\n",
