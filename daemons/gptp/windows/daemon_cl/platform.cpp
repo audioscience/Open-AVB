@@ -33,6 +33,7 @@
 
 #include <Winsock2.h>
 #include <stdint.h>
+#include <time.h>
 
 errno_t PLAT_strncpy( char *dest, const char *src, rsize_t max ) {
 	return strncpy_s( dest, max+1, src, _TRUNCATE );
@@ -52,4 +53,19 @@ uint16_t PLAT_ntohs( uint16_t s ) {
 
 uint32_t PLAT_ntohl( uint32_t l ) {
 	return ntohl( l );
+}
+
+uint64_t PLAT_htonll(uint64_t x)
+{
+	return ( (htonl(1) == 1) ? x : ((uint64_t)htonl((x) & 0xFFFFFFFF) << 32) | htonl((x) >> 32) );
+}
+
+uint64_t PLAT_ntohll(uint64_t x)
+{
+	return( (ntohl(1) == 1) ? x : ((uint64_t)ntohl((x) & 0xFFFFFFFF) << 32) | ntohl((x) >> 32) );
+}
+
+errno_t PLAT_localtime(const time_t * inTime, struct tm * outTm)
+{
+	return localtime_s(outTm, inTime);
 }

@@ -1,31 +1,31 @@
 /******************************************************************************
 
-  Copyright (c) 2009-2012, Intel Corporation 
+  Copyright (c) 2009-2012, Intel Corporation
   All rights reserved.
-  
-  Redistribution and use in source and binary forms, with or without 
+
+  Redistribution and use in source and binary forms, with or without
   modification, are permitted provided that the following conditions are met:
-  
-   1. Redistributions of source code must retain the above copyright notice, 
+
+   1. Redistributions of source code must retain the above copyright notice,
       this list of conditions and the following disclaimer.
-  
-   2. Redistributions in binary form must reproduce the above copyright 
-      notice, this list of conditions and the following disclaimer in the 
+
+   2. Redistributions in binary form must reproduce the above copyright
+      notice, this list of conditions and the following disclaimer in the
       documentation and/or other materials provided with the distribution.
-  
-   3. Neither the name of the Intel Corporation nor the names of its 
-      contributors may be used to endorse or promote products derived from 
+
+   3. Neither the name of the Intel Corporation nor the names of its
+      contributors may be used to endorse or promote products derived from
       this software without specific prior written permission.
-  
+
   THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
-  AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE 
-  IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE 
-  ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE 
-  LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR 
-  CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF 
-  SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS 
-  INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN 
-  CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) 
+  AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+  IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+  ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
+  LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+  CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+  SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+  INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+  CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
   ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
   POSSIBILITY OF SUCH DAMAGE.
 
@@ -33,6 +33,8 @@
 
 #ifndef WINDOWS_HAL_HPP
 #define WINDOWS_HAL_HPP
+
+/**@file*/
 
 #include <minwindef.h>
 #include <IPCListener.hpp>
@@ -45,7 +47,7 @@
 #include "packet.hpp"
 #include "ieee1588.hpp"
 #include "iphlpapi.h"
-#include "ipcdef.hpp"
+#include "windows_ipc.hpp"
 #include "tsc.hpp"
 
 #include "avbts_osipc.hpp"
@@ -55,19 +57,39 @@
 #include <map>
 #include <list>
 
+/**
+ * @brief WindowsPCAPNetworkInterface implements an interface to the network adapter
+ * through calls to the publicly available libraries known as PCap.
+ */
 class WindowsPCAPNetworkInterface : public OSNetworkInterface {
 	friend class WindowsPCAPNetworkInterfaceFactory;
 private:
 	pfhandle_t handle;
 	LinkLayerAddress local_addr;
 public:
-	virtual net_result send( LinkLayerAddress *addr, uint8_t *payload, size_t length, bool timestamp ) {
+	/**
+	 * @brief  Sends a packet to a remote address
+	 * @param  addr [in] Destination link Layer address
+	 * @param  payload [in] Data buffer
+	 * @param  length Size of buffer
+	 * @param  timestamp TRUE: Use timestamp, FALSE otherwise
+	 * @return net_result structure
+	 */
+	virtual net_result send( LinkLayerAddress *addr, uint16_t etherType, uint8_t *payload, size_t length, bool timestamp) {
 		packet_addr_t dest;
 		addr->toOctetArray( dest.addr );
-		if( sendFrame( handle, &dest, PTP_ETHERTYPE, payload, length ) != PACKET_NO_ERROR ) return net_fatal;
+		if( sendFrame( handle, &dest, etherType, payload, length ) != PACKET_NO_ERROR ) return net_fatal;
 		return net_succeed;
 	}
-	virtual net_result nrecv( LinkLayerAddress *addr, uint8_t *payload, size_t &length ) {
+	/**
+	 * @brief  Receives a packet from a remote address
+	 * @param  addr [out] Remote link layer address
+	 * @param  payload [out] Data buffer
+	 * @param  length [out] Length of received data
+	 * @param  delay [in] Specifications for PHY input and output delays in nanoseconds
+	 * @return net_result structure
+	 */
+	virtual net_result nrecv(LinkLayerAddress *addr, uint8_t *payload, size_t &length, struct phy_delay *delay) {
 		packet_addr_t dest;
 		packet_error_t pferror = recvFrame( handle, &dest, payload, length );
 		if( pferror != PACKET_NO_ERROR && pferror != PACKET_RECVTIMEOUT_ERROR ) return net_fatal;
@@ -75,22 +97,54 @@ public:
 		*addr = LinkLayerAddress( dest.addr );
 		return net_succeed;
 	}
+	/**
+	 * @brief  Gets the link layer address (MAC) of the network adapter
+	 * @param  addr [out] Link layer address
+	 * @return void
+	 */
 	virtual void getLinkLayerAddress( LinkLayerAddress *addr ) {
 		*addr = local_addr;
 	}
+
+	/**
+	* @brief Watch for netlink changes.
+	*/
+	virtual void watchNetLink(IEEE1588Port *pPort);
+
+	/**
+	 * @brief  Gets the offset to the start of data in the Layer 2 Frame
+	 * @return ::PACKET_HDR_LENGTH
+	 */
 	virtual unsigned getPayloadOffset() {
 		return PACKET_HDR_LENGTH;
 	}
+	/**
+	 * @brief Destroys the network interface
+	 */
 	virtual ~WindowsPCAPNetworkInterface() {
 		closeInterface( handle );
 		if( handle != NULL ) freePacketHandle( handle );
 	}
 protected:
+	/**
+	 * @brief Default constructor
+	 */
 	WindowsPCAPNetworkInterface() { handle = NULL; };
 };
 
+/**
+ * @brief WindowsPCAPNetworkInterface implements an interface to the network adapter
+ * through calls to the publicly available libraries known as PCap.
+ */
 class WindowsPCAPNetworkInterfaceFactory : public OSNetworkInterfaceFactory {
 public:
+	/**
+	 * @brief  Create a network interface
+	 * @param  net_iface [in] Network interface
+	 * @param  label [in] Interface label
+	 * @param  timestamper [in] HWTimestamper instance
+	 * @return TRUE success; FALSE error
+	 */
 	virtual bool createInterface( OSNetworkInterface **net_iface, InterfaceLabel *label, HWTimestamper *timestamper ) {
 		WindowsPCAPNetworkInterface *net_iface_l = new WindowsPCAPNetworkInterface();
 		LinkLayerAddress *addr = dynamic_cast<LinkLayerAddress *>(label);
@@ -113,6 +167,9 @@ error_nofree:
 	}
 };
 
+/**
+ * @brief Provides lock interface for windows
+ */
 class WindowsLock : public OSLock {
 	friend class WindowsLockFactory;
 private:
@@ -144,35 +201,62 @@ private:
 		return result;
 	}
 protected:
+	/**
+	 * @brief Default constructor
+	 */
 	WindowsLock() {
 		lock_c = NULL;
 	}
+	/**
+	 * @brief  Initializes lock interface
+	 * @param  type OSLockType
+	 */
 	bool initialize( OSLockType type ) {
 		lock_c = CreateMutex( NULL, false, NULL );
 		if( lock_c == NULL ) return false;
 		this->type = type;
 		return true;
 	}
+	/**
+	 * @brief Acquires lock
+	 * @return OSLockResult type
+	 */
 	OSLockResult lock() {
 		if( type == oslock_recursive ) {
 			return lock_l( INFINITE );
 		}
 		return nonreentrant_lock_l( INFINITE );
 	}
+	/**
+	 * @brief  Tries to acquire lock
+	 * @return OSLockResult type
+	 */
 	OSLockResult trylock() {
 		if( type == oslock_recursive ) {
 			return lock_l( 0 );
 		}
 		return nonreentrant_lock_l( 0 );
 	}
+	/**
+	 * @brief  Releases lock
+	 * @return OSLockResult type
+	 */
 	OSLockResult unlock() {
 		ReleaseMutex( lock_c );
 		return oslock_ok;
 	}
 };
 
+/**
+ * @brief Provides the LockFactory abstraction
+ */
 class WindowsLockFactory : public OSLockFactory {
 public:
+	/**
+	 * @brief  Creates a new lock mechanism
+	 * @param  type Lock type - OSLockType
+	 * @return New lock on OSLock format
+	 */
 	OSLock *createLock( OSLockType type ) {
 		WindowsLock *lock = new WindowsLock();
 		if( !lock->initialize( type )) {
@@ -183,23 +267,38 @@ public:
 	}
 };
 
+/**
+ * @brief Provides a OSCondition interface for windows
+ */
 class WindowsCondition : public OSCondition {
 	friend class WindowsConditionFactory;
 private:
 	SRWLOCK lock;
 	CONDITION_VARIABLE condition;
 protected:
+	/**
+	 * @brief Initializes the locks and condition variables
+	 */
 	bool initialize() {
 		InitializeSRWLock( &lock );
 		InitializeConditionVariable( &condition );
 		return true;
 	}
 public:
+	/**
+	 * @brief  Acquire a new lock and increment the condition counter
+	 * @return true
+	 */
 	bool wait_prelock() {
 		AcquireSRWLockExclusive( &lock );
 		up();
 		return true;
 	}
+	/**
+	 * @brief  Waits for a condition and decrements the condition
+	 * counter when the condition is met.
+	 * @return TRUE if the condition is met and the lock is released. FALSE otherwise.
+	 */
 	bool wait() {
 		BOOL result = SleepConditionVariableSRW( &condition, &lock, INFINITE, 0 );
 		bool ret = false;
@@ -210,6 +309,10 @@ public:
 		}
 		return ret;
 	}
+	/**
+	 * @brief Sends a signal to unblock other threads
+	 * @return true
+	 */
 	bool signal() {
 		AcquireSRWLockExclusive( &lock );
 		if( waiting() ) WakeAllConditionVariable( &condition );
@@ -218,6 +321,9 @@ public:
 	}
 };
 
+/**
+ * @brief Condition factory for windows
+ */
 class WindowsConditionFactory : public OSConditionFactory {
 public:
 	OSCondition *createCondition() {
@@ -230,29 +336,47 @@ class WindowsTimerQueue;
 
 struct TimerQueue_t;
 
+/**
+ * @brief Timer queue handler arguments structure
+ * @todo Needs more details from original developer
+ */
 struct WindowsTimerQueueHandlerArg {
-	HANDLE timer_handle;
-	HANDLE queue_handle;
-	event_descriptor_t *inner_arg;
-	ostimerq_handler func;
-	int type;
-	bool rm;
-	WindowsTimerQueue *queue;
-	TimerQueue_t *timer_queue;
+	HANDLE timer_handle;	/*!< timer handler */
+	HANDLE queue_handle;	/*!< queue handler */
+	event_descriptor_t *inner_arg;	/*!< Event inner arguments */
+	ostimerq_handler func;	/*!< Timer queue callback*/
+	int type;				/*!< Type of timer */
+	bool rm;				/*!< Flag that signalizes the argument deletion*/
+	WindowsTimerQueue *queue;	/*!< Windows Timer queue */
+	TimerQueue_t *timer_queue;	/*!< Timer queue*/
 };
 
+/**
+ * @brief Creates a list of type WindowsTimerQueueHandlerArg
+ */
 typedef std::list<WindowsTimerQueueHandlerArg *> TimerArgList_t;
+/**
+ * @brief Timer queue type
+ */
 struct TimerQueue_t {
-	TimerArgList_t arg_list;
-	HANDLE queue_handle;
-	SRWLOCK lock;
+	TimerArgList_t arg_list;		/*!< Argument list */
+	HANDLE queue_handle;			/*!< Handle to the timer queue */
+	SRWLOCK lock;					/*!< Lock type */
 };
 
-
+/**
+ * @brief Windows Timer queue handler callback definition
+ */
 VOID CALLBACK WindowsTimerQueueHandler( PVOID arg_in, BOOLEAN ignore );
 
+/**
+ * @brief Creates a map for the timerQueue
+ */
 typedef std::map<int,TimerQueue_t> TimerQueueMap_t;
 
+/**
+ * @brief Windows timer queue interface
+ */
 class WindowsTimerQueue : public OSTimerQueue {
 	friend class WindowsTimerQueueFactory;
 	friend VOID CALLBACK WindowsTimerQueueHandler( PVOID arg_in, BOOLEAN ignore );
@@ -275,10 +399,23 @@ private:
 
 	}
 protected:
+	/**
+	 * @brief Default constructor. Initializes timers lock
+	 */
 	WindowsTimerQueue() {
 		InitializeSRWLock( &retiredTimersLock );
 	};
 public:
+	/**
+	 * @brief  Create a new event and add it to the timer queue
+	 * @param  micros Time in microsseconds
+	 * @param  type ::Event type
+	 * @param  func Callback function
+	 * @param  arg [in] Event arguments
+	 * @param  rm when true, allows elements to be deleted from the queue
+	 * @param  event [in] Pointer to the event to be created
+	 * @return Always return true
+	 */
 	bool addEvent( unsigned long micros, int type, ostimerq_handler func, event_descriptor_t *arg, bool rm, unsigned *event ) {
 		WindowsTimerQueueHandlerArg *outer_arg = new WindowsTimerQueueHandlerArg();
 		cleanupRetiredTimers();
@@ -299,6 +436,12 @@ public:
 		ReleaseSRWLockExclusive( &timerQueueMap[type].lock );
 		return true;
 	}
+	/**
+	 * @brief  Cancels an event from the queue
+	 * @param  type ::Event type
+	 * @param  event [in] Pointer to the event to be removed
+	 * @return Always returns true.
+	 */
 	bool cancelEvent( int type, unsigned *event ) {
 		TimerQueueMap_t::iterator iter = timerQueueMap.find( type );
 		if( iter == timerQueueMap.end() ) return false;
@@ -318,48 +461,92 @@ public:
 	}
 };
 
+/**
+ * @brief Windows callback for the timer queue handler
+ */
 VOID CALLBACK WindowsTimerQueueHandler( PVOID arg_in, BOOLEAN ignore );
 
+/**
+ * @brief Windows implementation of OSTimerQueueFactory
+ */
 class WindowsTimerQueueFactory : public OSTimerQueueFactory {
 public:
+	/**
+	 * @brief  Creates a new timer queue
+	 * @param  clock [in] IEEE1588Clock type
+	 * @return new timer queue
+	 */
     virtual OSTimerQueue *createOSTimerQueue( IEEE1588Clock *clock ) {
         WindowsTimerQueue *timerq = new WindowsTimerQueue();
         return timerq;
     };
 };
 
+/**
+ * @brief Windows implementation of OSTimer
+ */
 class WindowsTimer : public OSTimer {
     friend class WindowsTimerFactory;
 public:
+	/**
+	 * @brief  Sleep for an amount of time
+	 * @param  micros Time in microsseconds
+	 * @return Time in microsseconds
+	 */
     virtual unsigned long sleep( unsigned long micros ) {
         Sleep( micros/1000 );
         return micros;
     }
 protected:
+	/**
+	 * @brief Default constructor
+	 */
     WindowsTimer() {};
 };
 
+/**
+ * @brief Windows implementation of OSTimerFactory
+ */
 class WindowsTimerFactory : public OSTimerFactory {
 public:
+	/**
+	 * @brief  Creates a new timer
+	 * @return New windows OSTimer
+	 */
     virtual OSTimer *createTimer() {
         return new WindowsTimer();
     }
 };
 
+/**
+ * @brief OSThread argument structure
+ */
 struct OSThreadArg {
-    OSThreadFunction func;
-    void *arg;
-    OSThreadExitCode ret;
+    OSThreadFunction func;	/*!< Thread callback function */
+    void *arg;				/*!< Thread arguments */
+    OSThreadExitCode ret;	/*!< Return value */
 };
 
+/**
+ * @brief Windows OSThread callback
+ */
 DWORD WINAPI OSThreadCallback( LPVOID input );
 
+/**
+ * @brief Implements OSThread interface for windows
+ */
 class WindowsThread : public OSThread {
     friend class WindowsThreadFactory;
 private:
     HANDLE thread_id;
     OSThreadArg *arg_inner;
 public:
+	/**
+	 * @brief  Starts a new thread
+	 * @param  function Function to be started as a new thread
+	 * @param  arg [in] Function's arguments
+	 * @return TRUE if successfully started, FALSE otherwise.
+	 */
     virtual bool start( OSThreadFunction function, void *arg ) {
         arg_inner = new OSThreadArg();
         arg_inner->func = function;
@@ -368,6 +555,11 @@ public:
         if( thread_id == NULL ) return false;
         else return true;
     }
+	/**
+	 * @brief  Joins a terminated thread
+	 * @param  exit_code [out] Thread's return code
+	 * @return TRUE in case of success. FALSE otherwise.
+	 */
     virtual bool join( OSThreadExitCode &exit_code ) {
         if( WaitForSingleObject( thread_id, INFINITE ) != WAIT_OBJECT_0 ) return false;
         exit_code = arg_inner->ret;
@@ -375,26 +567,65 @@ public:
         return true;
     }
 protected:
+	/**
+	 * @brief Default constructor
+	 */
 	WindowsThread() {};
 };
 
+/**
+ * @brief Provides a windows implmementation of OSThreadFactory
+ */
 class WindowsThreadFactory : public OSThreadFactory {
 public:
+	/**
+	 * @brief  Creates a new windows thread
+	 * @return New thread of type OSThread
+	 */
 	OSThread *createThread() {
 		return new WindowsThread();
 	}
 };
 
-#define NETCLOCK_HZ_OTHER 1056000000
-#define NETCLOCK_HZ_NANO 1000000000
-#define ONE_WAY_PHY_DELAY 8000
-#define NANOSECOND_CLOCK_PART_DESCRIPTION "I217-LM"
-#define NETWORK_CARD_ID_PREFIX "\\\\.\\"
-#define OID_INTEL_GET_RXSTAMP 0xFF020264
-#define OID_INTEL_GET_TXSTAMP 0xFF020263
-#define OID_INTEL_GET_SYSTIM  0xFF020262
-#define OID_INTEL_SET_SYSTIM  0xFF020261
+#define I217_DESC "I217-LM"
+#define I219_DESC "I219-V"
 
+#define NETWORK_CARD_ID_PREFIX "\\\\.\\"			/*!< Network adapter prefix */
+#define OID_INTEL_GET_RXSTAMP 0xFF020264			/*!< Get RX timestamp code*/
+#define OID_INTEL_GET_TXSTAMP 0xFF020263			/*!< Get TX timestamp code*/
+#define OID_INTEL_GET_SYSTIM  0xFF020262			/*!< Get system time code */
+#define OID_INTEL_SET_SYSTIM  0xFF020261			/*!< Set system time code */
+
+typedef struct
+{
+	uint32_t clock_rate;
+	char *device_desc;
+} DeviceClockRateMapping;
+
+static DeviceClockRateMapping DeviceClockRateMap[] =
+{
+	{ 1000000000, I217_DESC	},
+	{ 1008000000, I219_DESC	},
+	{ 0, NULL },
+};
+
+typedef struct
+{
+	struct phy_delay delay;
+	char *device_desc;
+} DevicePhyDelayMapping;
+
+static DevicePhyDelayMapping DevicePhyDelayMap[] =
+{
+	{{ -1, -1, 6950, 8050, },	I217_DESC	},
+	{{ -1, -1, 6700, 7750, },	I219_DESC	},
+	{{ -1, -1, -1, -1 }, NULL },
+};
+
+
+/**
+ * @brief Windows HWTimestamper implementation
+ */
 class WindowsTimestamper : public HWTimestamper {
 private:
     // No idea whether the underlying implementation is thread safe
@@ -433,53 +664,94 @@ private:
 		return (uint64_t) scaled_output;
 	}
 public:
+	/**
+	 * @brief  Initializes the network adaptor and the hw timestamper interface
+	 * @param  iface_label InterfaceLabel
+	 * @param  net_iface Network interface
+	 * @return TRUE if success; FALSE if error
+	 */
 	virtual bool HWTimestamper_init( InterfaceLabel *iface_label, OSNetworkInterface *net_iface );
-    virtual bool HWTimestamper_gettime( Timestamp *system_time, Timestamp *device_time, uint32_t *local_clock, uint32_t *nominal_clock_rate )
-    {
-        DWORD buf[6];
-        DWORD returned;
-        uint64_t now_net, now_tsc;
-        DWORD result;
+	/**
+	 * @brief  Get the cross timestamping information.
+	 * The gPTP subsystem uses these samples to calculate
+	 * ratios which can be used to translate or extrapolate
+	 * one clock into another clock reference. The gPTP service
+	 * uses these supplied cross timestamps to perform internal
+	 * rate estimation and conversion functions.
+	 * @param  system_time [out] System time
+	 * @param  device_time [out] Device time
+	 * @param  local_clock [out] Local clock
+	 * @param  nominal_clock_rate [out] Nominal clock rate
+	 * @return True in case of success. FALSE in case of error
+	 */
+	virtual bool HWTimestamper_gettime( Timestamp *system_time, Timestamp *device_time, uint32_t *local_clock,
+					    uint32_t *nominal_clock_rate ) {
+		DWORD buf[6];
+		DWORD returned;
+		uint64_t now_net, now_tsc;
+		DWORD result;
 
-        memset( buf, 0xFF, sizeof( buf ));
-        if(( result = readOID( OID_INTEL_GET_SYSTIM, buf, sizeof(buf), &returned )) != ERROR_SUCCESS ) return false;
+		memset( buf, 0xFF, sizeof( buf ));
+		if(( result = readOID( OID_INTEL_GET_SYSTIM, buf, sizeof(buf), &returned )) != ERROR_SUCCESS ) return false;
 
-        now_net = (((uint64_t)buf[1]) << 32) | buf[0];
-        now_net = scaleNativeClockToNanoseconds( now_net );
-        *device_time = nanoseconds64ToTimestamp( now_net );
+		now_net = (((uint64_t)buf[1]) << 32) | buf[0];
+		now_net = scaleNativeClockToNanoseconds( now_net );
+		*device_time = nanoseconds64ToTimestamp( now_net );
 		device_time->_version = version;
 
-        now_tsc = (((uint64_t)buf[3]) << 32) | buf[2];
-        now_tsc = scaleTSCClockToNanoseconds( now_tsc );
-        *system_time = nanoseconds64ToTimestamp( now_tsc );
+		now_tsc = (((uint64_t)buf[3]) << 32) | buf[2];
+		now_tsc = scaleTSCClockToNanoseconds( now_tsc );
+		*system_time = nanoseconds64ToTimestamp( now_tsc );
 		system_time->_version = version;
 
-        return true;
-    }
+		return true;
+	}
 
+	/**
+	 * @brief  Gets the TX timestamp
+	 * @param  identity [in] PortIdentity interface
+	 * @param  sequenceId Sequence ID
+	 * @param  timestamp [out] TX hardware timestamp
+	 * @param  clock_value Not used
+	 * @param  last Not used
+	 * @return GPTP_EC_SUCCESS if no error, GPTP_EC_FAILURE if error and GPTP_EC_EAGAIN to try again.
+	 */
 	virtual int HWTimestamper_txtimestamp( PortIdentity *identity, uint16_t sequenceId, Timestamp &timestamp, unsigned &clock_value, bool last )
 	{
 		DWORD buf[4], buf_tmp[4];
 		DWORD returned = 0;
 		uint64_t tx_r,tx_s;
 		DWORD result;
+		struct phy_delay delay_val;
+
+		get_phy_delay(&delay_val);//gets the phy delay
+		Timestamp latency(delay_val.gb_tx_phy_delay, 0, 0);
+
 		while(( result = readOID( OID_INTEL_GET_TXSTAMP, buf_tmp, sizeof(buf_tmp), &returned )) == ERROR_SUCCESS ) {
 			memcpy( buf, buf_tmp, sizeof( buf ));
 		}
 		if( result != ERROR_GEN_FAILURE ) {
 			fprintf( stderr, "Error is: %d\n", result );
-			return -1;
+			return GPTP_EC_FAILURE;
 		}
-		if( returned != sizeof(buf_tmp) ) return -72;
+		if( returned != sizeof(buf_tmp) ) return GPTP_EC_EAGAIN;
 		tx_r = (((uint64_t)buf[1]) << 32) | buf[0];
 		tx_s = scaleNativeClockToNanoseconds( tx_r );
-		tx_s += ONE_WAY_PHY_DELAY;
-		timestamp = nanoseconds64ToTimestamp( tx_s );
+		timestamp = nanoseconds64ToTimestamp( tx_s ) + latency;
 		timestamp._version = version;
 
-		return 0;
+		return GPTP_EC_SUCCESS;
 	}
 
+	/**
+	 * @brief  Gets the RX timestamp
+	 * @param  identity PortIdentity interface
+	 * @param  sequenceId  Sequence ID
+	 * @param  timestamp [out] RX hardware timestamp
+	 * @param  clock_value [out] Not used
+	 * @param  last Not used
+	 * @return GPTP_EC_SUCCESS if no error, GPTP_EC_FAILURE if error and GPTP_EC_EAGAIN to try again.
+	 */
 	virtual int HWTimestamper_rxtimestamp( PortIdentity *identity, uint16_t sequenceId, Timestamp &timestamp, unsigned &clock_value, bool last )
 	{
 		DWORD buf[4], buf_tmp[4];
@@ -487,38 +759,69 @@ public:
 		uint64_t rx_r,rx_s;
 		DWORD result;
 		uint16_t packet_sequence_id;
+		struct phy_delay delay_val;
+
+		get_phy_delay(&delay_val);//gets the phy delay
+		Timestamp latency(delay_val.gb_rx_phy_delay, 0, 0);
+
 		while(( result = readOID( OID_INTEL_GET_RXSTAMP, buf_tmp, sizeof(buf_tmp), &returned )) == ERROR_SUCCESS ) {
 			memcpy( buf, buf_tmp, sizeof( buf ));
 		}
-		if( result != ERROR_GEN_FAILURE ) return -1;
-		if( returned != sizeof(buf_tmp) ) return -72;
+		if( result != ERROR_GEN_FAILURE ) return GPTP_EC_FAILURE;
+		if( returned != sizeof(buf_tmp) ) return GPTP_EC_EAGAIN;
 		packet_sequence_id = *((uint32_t *) buf+3) >> 16;
-		if( PLAT_ntohs( packet_sequence_id ) != sequenceId ) return -72;
+		if( PLAT_ntohs( packet_sequence_id ) != sequenceId ) return GPTP_EC_EAGAIN;
 		rx_r = (((uint64_t)buf[1]) << 32) | buf[0];
 		rx_s = scaleNativeClockToNanoseconds( rx_r );
-		rx_s -= ONE_WAY_PHY_DELAY;
-		timestamp = nanoseconds64ToTimestamp( rx_s );
+		timestamp = nanoseconds64ToTimestamp( rx_s ) - latency;
 		timestamp._version = version;
 
-		return 0;
+		return GPTP_EC_SUCCESS;
 	}
 };
 
 
-
+/**
+ * @brief Named pipe interface
+ */
 class WindowsNamedPipeIPC : public OS_IPC {
 private:
-	HANDLE pipe;
-	LockableOffset loffset;
-	PeerList peerlist;
+	HANDLE pipe_;
+	LockableOffset lOffset_;
+	PeerList peerList_;
 public:
-	WindowsNamedPipeIPC() { };
+	/**
+	 * @brief Default constructor. Initializes the IPC interface
+	 */
+	WindowsNamedPipeIPC() : pipe_(INVALID_HANDLE_VALUE) { };
+	/**
+	 * @brief Destroys the IPC interface
+	 */
 	~WindowsNamedPipeIPC() {
-		CloseHandle( pipe );
+		if (pipe_ != 0 && pipe_ != INVALID_HANDLE_VALUE)
+			::CloseHandle(pipe_);
 	}
-	virtual bool init( OS_IPC_ARG *arg = NULL );
-	virtual bool update( int64_t ml_phoffset, int64_t ls_phoffset, FrequencyRatio ml_freqoffset, FrequencyRatio ls_freq_offset, uint64_t local_time,
-		uint32_t sync_count, uint32_t pdelay_count, PortState port_state );
+	/**
+	 * @brief  Initializes the IPC arguments
+	 * @param  arg [in] IPC arguments. Not in use
+	 * @return Always returns TRUE.
+	 */
+	virtual bool init(OS_IPC_ARG *arg = NULL);
+	/**
+	 * @brief  Updates IPC interface values
+	 * @param  ml_phoffset Master to local phase offset
+	 * @param  ls_phoffset Local to system phase offset
+	 * @param  ml_freqoffset Master to local frequency offset
+	 * @param  ls_freq_offset Local to system frequency offset
+	 * @param  local_time Local time
+	 * @param  sync_count Counts of sync mesasges
+	 * @param  pdelay_count Counts of pdelays
+	 * @param  port_state PortState information
+     * @param  asCapable asCapable flag
+	 * @return TRUE if sucess; FALSE if error
+	 */
+	virtual bool update(int64_t ml_phoffset, int64_t ls_phoffset, FrequencyRatio ml_freqoffset, FrequencyRatio ls_freq_offset, uint64_t local_time,
+		uint32_t sync_count, uint32_t pdelay_count, PortState port_state, bool asCapable);
 };
 
 #endif
