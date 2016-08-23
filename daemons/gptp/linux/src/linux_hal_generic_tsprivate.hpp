@@ -34,20 +34,28 @@
 #ifndef LINUX_HAL_TSPRIVATE
 #define LINUX_HAL_TSPRIVATE
 
+/**@file*/
+
 #include <pthread.h>
 #ifdef WITH_IGBLIB
 extern "C" {
 #include <igb.h>
 }
+/**
+ * @brief Private IGB structure.
+ */
 struct LinuxTimestamperIGBPrivate {
 	device_t igb_dev;
 	bool igb_initd;
 };
 #endif
 
+/**
+ * @brief Provides private members for the LinuxTimestamperGeneric class
+ */
 struct LinuxTimestamperGenericPrivate {
-	pthread_mutex_t cross_stamp_lock;
-	clockid_t clockid;
+	pthread_mutex_t cross_stamp_lock;		/*!< Cross timestamp lock*/
+	clockid_t clockid;						/*!< Clock ID */
 };
 
 #endif/*LINUX_HAL_TSPRIVATE*/

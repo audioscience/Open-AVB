@@ -32,6 +32,9 @@
 ******************************************************************************/
 
 #include <linux/timex.h>
+ // avoid indirect inclusion of time.h since this will clash with linux/timex.h
+#define _TIME_H  1
+#define _STRUCT_TIMEVAL 1
 #include <linux_hal_generic.hpp>
 #include <syscall.h>
 #include <math.h>
@@ -56,7 +59,7 @@ bool LinuxTimestamperGeneric::HWTimestamper_adjclockphase( int64_t phase_adjust 
 	for
 		( iface_iter = iface_list.begin(); iface_iter != iface_list.end();
 		  ++iface_iter ) {
-		(*iface_iter)->disable_clear_rx_queue();
+		(*iface_iter)->disable_rx_queue();
 	}
 		
 	rxTimestampList.clear();
@@ -84,7 +87,7 @@ bool LinuxTimestamperGeneric::HWTimestamper_adjclockphase( int64_t phase_adjust 
 	iface_iter = iface_list.begin();
 	for( iface_iter = iface_list.begin(); iface_iter != iface_list.end();
 		 ++iface_iter ) {
-		(*iface_iter)->reenable_rx_queue();
+		(*iface_iter)->clear_reenable_rx_queue();
 	}
 	  
 	delete timer;
