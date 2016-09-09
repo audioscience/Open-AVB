@@ -1575,7 +1575,6 @@ void PTPMessagePathDelayRespFollowUp::processMessage(IEEE1588Port * port)
 
 	port->incPdelayCount();
 
-
 	link_delay =
 		((response_rx_timestamp.seconds_ms * 1LL -
 		  request_tx_timestamp.seconds_ms) << 32) * 1000000000;
@@ -1602,17 +1601,21 @@ void PTPMessagePathDelayRespFollowUp::processMessage(IEEE1588Port * port)
 	if
 		( port->getPeerRateOffset() > .998 &&
 		  port->getPeerRateOffset() < 1.002 ) {
-		turn_around = (int64_t) (turn_around * port->getPeerRateOffset());
+
+		GPTP_LOG_VERBOSE
+			("Turn Around Adjustment %Lf",
+			((long long)turn_around * port->getPeerRateOffset()) /
+			1000000000000LL);
+		GPTP_LOG_VERBOSE
+			("Step #1: Turn Around Adjustment %Lf",
+			((long long)turn_around * port->getPeerRateOffset()));
+
+		turn_around = (int64_t)(turn_around * port->getPeerRateOffset());
 	}
 
 	GPTP_LOG_VERBOSE
-		("Turn Around Adjustment %Lf",
-		 ((long long)turn_around * port->getPeerRateOffset()) /
-		 1000000000000LL);
-	GPTP_LOG_VERBOSE
-		("Step #1: Turn Around Adjustment %Lf",
-		 ((long long)turn_around * port->getPeerRateOffset()));
-	GPTP_LOG_VERBOSE("Adjusted Peer turn around is %Lu", turn_around);
+		("Link delay calc, total delay %lld, peer turn around %llu",
+		link_delay, turn_around);
 
 	/* Subtract turn-around time from link delay after rate adjustment */
 	link_delay -= turn_around;
