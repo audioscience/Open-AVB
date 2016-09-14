@@ -31,6 +31,11 @@ Meaning of IPC provided values
 Linux Specific
 ++++++++++++++
 
+Requirements for documentation on a ubuntu based system:
+    - cmake: sudo apt-get install cmake
+    - doxygen: sudo apt-get install doxygen
+    - graphviz: sudo apt-get install graphviz
+
 To build, execute the linux/build makefile.
 
 To build for I210:
@@ -53,26 +58,33 @@ such as
 The daemon creates a shared memory segment with the 'ptp' group. Some distributions may not have this group installed.  The IPC interface will not available unless the 'ptp' group is available.
 
 
-Windows Version
-+++++++++++++++
+Windows Specific
+++++++++++++++++
+
+Registry Changes
+
+* Find the driver key:
+  Go to device manager, device properties, details, and select driver key.
+  For instance, the registry could be: {4d36e972-e325-11ce-bfc1-08002be10318}\0000.
+
+* Search the registry for the subkey found on the driver key above:
+  Following the example above, search for 4d36e972-e325-11ce-bfc1-08002be10318 where there is a subkey 0000.
+  For instance, it could be located at HKLM/System/ControlSet001/Control/Class.
+
+* Add a DWORD value called TimeSync with a value of 1 to the subkey (0000 in the example above).
+
+* Reset the driver by disabling and re-enabling (or reboot).
 
 Build Dependencies
 
 * WinPCAP Developer's Pack (WpdPack) is required for linking - downloadable from http://www.winpcap.org/devel.htm.
 
-Extract WpdPack so the Include folder is in one of the below locations
+* CMAKE 3.2.2 or later
 
-1- %ProgramData%
-	\WpdPack
-		\Include
-		\Lib
-		\Lib\x64
+* Microsoft Visual Studio 2013 or later
 
-2- %USERPROFILE%
-	\src\pcap
-		\Include
-		\Lib
-		\Lib\x64
+The following environment variables must be defined:
+* WPCAP_DIR the directory where WinPcap is installed
 
 * WinPCAP must also be installed on any machine where the daemon runs.
 

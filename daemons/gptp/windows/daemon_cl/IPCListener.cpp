@@ -1,31 +1,31 @@
 /******************************************************************************
 
-Copyright (c) 2009-2012, Intel Corporation 
+Copyright (c) 2009-2012, Intel Corporation
 All rights reserved.
 
-Redistribution and use in source and binary forms, with or without 
+Redistribution and use in source and binary forms, with or without
 modification, are permitted provided that the following conditions are met:
 
-1. Redistributions of source code must retain the above copyright notice, 
+1. Redistributions of source code must retain the above copyright notice,
 this list of conditions and the following disclaimer.
 
-2. Redistributions in binary form must reproduce the above copyright 
-notice, this list of conditions and the following disclaimer in the 
+2. Redistributions in binary form must reproduce the above copyright
+notice, this list of conditions and the following disclaimer in the
 documentation and/or other materials provided with the distribution.
 
-3. Neither the name of the Intel Corporation nor the names of its 
-contributors may be used to endorse or promote products derived from 
+3. Neither the name of the Intel Corporation nor the names of its
+contributors may be used to endorse or promote products derived from
 this software without specific prior written permission.
 
 THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
-AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE 
-IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE 
-ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE 
-LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR 
-CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF 
-SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS 
-INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN 
-CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) 
+AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
+LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
 ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 POSSIBILITY OF SUCH DAMAGE.
 
@@ -34,9 +34,6 @@ POSSIBILITY OF SUCH DAMAGE.
 #include <windows.h>
 #include <PeerList.hpp>
 #include <IPCListener.hpp>
-#include <ipcdef.hpp>
-
-#define OUTSTANDING_MESSAGES 10
 
 DWORD WINAPI IPCListener::IPCListenerLoop( IPCSharedData *arg ) {
 	PeerList *list = arg->list;
@@ -68,7 +65,7 @@ DWORD WINAPI IPCListener::IPCListenerLoop( IPCSharedData *arg ) {
 			pipe = CreateNamedPipe( pipename, PIPE_ACCESS_DUPLEX | FILE_FLAG_OVERLAPPED, PIPE_TYPE_BYTE | PIPE_READMODE_BYTE , PIPE_UNLIMITED_INSTANCES,
 				OUTSTANDING_MESSAGES*NPIPE_MAX_SERVER_MSG_SZ, OUTSTANDING_MESSAGES*NPIPE_MAX_MSG_SZ, 0, NULL );
 			if( pipe == INVALID_HANDLE_VALUE ) {
-				XPTPD_ERROR( "Open pipe error (%s): %d", pipename, GetLastError() );
+				GPTP_LOG_ERROR( "Open pipe error (%s): %d", pipename, GetLastError() );
 				goto do_error;
 			}
 			pipe_state = PIPE_UNCONNECT;
@@ -85,7 +82,7 @@ DWORD WINAPI IPCListener::IPCListenerLoop( IPCSharedData *arg ) {
 					err = GetLastError();
 					switch( err ) {
 					default:
-						XPTPD_ERROR( "Attempt to connect on Pipe failed, %d", err );
+						GPTP_LOG_ERROR( "Attempt to connect on Pipe failed, %d", err );
 						goto do_error;
 					case ERROR_PIPE_CONNECTED:
 						pipe_state = PIPE_CONNECT;
@@ -115,7 +112,7 @@ DWORD WINAPI IPCListener::IPCListenerLoop( IPCSharedData *arg ) {
 					err = GetLastError();
 					switch( err ) {
 					default:
-						XPTPD_ERROR( "Failed to read from pipe @%u,%d", __LINE__, err );
+						GPTP_LOG_ERROR( "Failed to read from pipe @%u,%d", __LINE__, err );
 						goto do_error;
 					case ERROR_BROKEN_PIPE:
 						pipe_state = PIPE_CLOSED;
@@ -140,30 +137,30 @@ DWORD WINAPI IPCListener::IPCListenerLoop( IPCSharedData *arg ) {
 						pipe_state = PIPE_CLOSED;
 						continue;
 					}
-					XPTPD_ERROR( "Failed to read from pipe @%u,%d", __LINE__, err );
+					GPTP_LOG_ERROR( "Failed to read from pipe @%u,%d", __LINE__, err );
 					goto do_error;
 				}
 				switch( ((WindowsNPipeMessage *)tmp)->getType() ) {
 				case CTRL_MSG:
 					((WinNPipeCtrlMessage *)tmp)->init();
 					if(( readlen = ((WinNPipeCtrlMessage *)tmp)->read( pipe, readlen )) == -1 ) {
-						XPTPD_ERROR( "Failed to read from pipe @%u", __LINE__ );
+						GPTP_LOG_ERROR( "Failed to read from pipe @%u", __LINE__ );
 						goto do_error;
 					}
 					//readlen may not be set properly ??
 					// Attempt to add or remove from the list
 					switch( ((WinNPipeCtrlMessage *)tmp)->getCtrlWhich() ) {
 					default:
-						XPTPD_ERROR( "Recvd CTRL cmd specifying illegal operation @%u", __LINE__ );
+						GPTP_LOG_ERROR( "Recvd CTRL cmd specifying illegal operation @%u", __LINE__ );
 						goto do_error;
 					case ADD_PEER:
 						if( !list->IsReady() || !list->add( ((WinNPipeCtrlMessage *)tmp)->getPeerAddr() ) ) {
-							XPTPD_ERROR( "Failed to add peer @%u", __LINE__ );
+							GPTP_LOG_ERROR( "Failed to add peer @%u", __LINE__ );
 						}
 						break;
 					case REMOVE_PEER:
 						if( !list->IsReady() || !list->remove( ((WinNPipeCtrlMessage *)tmp)->getPeerAddr() ) ) {
-							XPTPD_ERROR( "Failed to remove peer @%u", __LINE__ );
+							GPTP_LOG_ERROR( "Failed to remove peer @%u", __LINE__ );
 						}
 						break;
 					}
@@ -171,7 +168,7 @@ DWORD WINAPI IPCListener::IPCListenerLoop( IPCSharedData *arg ) {
 				case OFFSET_MSG:
 					((WinNPipeQueryMessage *)tmp)->init();
 					if(( readlen = ((WinNPipeQueryMessage *)tmp)->read( pipe, readlen )) == -1 ) {
-						XPTPD_ERROR( "Failed to read from pipe @%u", __LINE__ );
+						GPTP_LOG_ERROR( "Failed to read from pipe @%u", __LINE__ );
 						goto do_error;
 					}
 					// Create an offset message and send it
@@ -182,7 +179,7 @@ DWORD WINAPI IPCListener::IPCListenerLoop( IPCSharedData *arg ) {
 					((WinNPipeOffsetUpdateMessage *)tmp)->write(pipe);
 					break;
 				default:
-					XPTPD_ERROR( "Recvd Unknown Message" );
+					GPTP_LOG_ERROR( "Recvd Unknown Message" );
 					// Is this recoverable?
 					goto do_error;
 				}

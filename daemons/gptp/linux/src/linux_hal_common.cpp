@@ -1,31 +1,31 @@
 /******************************************************************************
 
-  Copyright (c) 2009-2012, Intel Corporation 
+  Copyright (c) 2009-2012, Intel Corporation
   All rights reserved.
-  
-  Redistribution and use in source and binary forms, with or without 
+
+  Redistribution and use in source and binary forms, with or without
   modification, are permitted provided that the following conditions are met:
-  
-   1. Redistributions of source code must retain the above copyright notice, 
+
+   1. Redistributions of source code must retain the above copyright notice,
       this list of conditions and the following disclaimer.
-  
-   2. Redistributions in binary form must reproduce the above copyright 
-      notice, this list of conditions and the following disclaimer in the 
+
+   2. Redistributions in binary form must reproduce the above copyright
+      notice, this list of conditions and the following disclaimer in the
       documentation and/or other materials provided with the distribution.
-  
-   3. Neither the name of the Intel Corporation nor the names of its 
-      contributors may be used to endorse or promote products derived from 
+
+   3. Neither the name of the Intel Corporation nor the names of its
+      contributors may be used to endorse or promote products derived from
       this software without specific prior written permission.
-  
+
   THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
-  AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE 
-  IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE 
-  ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE 
-  LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR 
-  CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF 
-  SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS 
-  INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN 
-  CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) 
+  AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+  IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+  ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
+  LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+  CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+  SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+  INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+  CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
   ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
   POSSIBILITY OF SUCH DAMAGE.
 
@@ -37,7 +37,7 @@
 #include <avbts_port.hpp>
 
 #include <pthread.h>
-#include <ipcdef.hpp>
+#include <linux_ipc.hpp>
 
 #include <sys/mman.h>
 #include <fcntl.h>
@@ -53,6 +53,13 @@
 #include <netpacket/packet.h>
 #include <sys/ioctl.h>
 #include <sys/types.h>
+#include <sys/stat.h>
+
+#include <sys/socket.h>
+#include <net/if.h>
+#include <netinet/in.h>
+#include <linux/netlink.h>
+#include <linux/rtnetlink.h>
 
 Timestamp tsToTimestamp(struct timespec *ts)
 {
@@ -76,19 +83,19 @@ LinuxNetworkInterface::~LinuxNetworkInterface() {
 }
 
 net_result LinuxNetworkInterface::send
-( LinkLayerAddress *addr, uint8_t *payload, size_t length, bool timestamp ) {
+( LinkLayerAddress *addr, uint16_t etherType, uint8_t *payload, size_t length, bool timestamp ) {
 	sockaddr_ll *remote = NULL;
 	int err;
 	remote = new struct sockaddr_ll;
 	memset( remote, 0, sizeof( *remote ));
 	remote->sll_family = AF_PACKET;
-	remote->sll_protocol = PLAT_htons( PTP_ETHERTYPE );
+	remote->sll_protocol = PLAT_htons( etherType );
 	remote->sll_ifindex = ifindex;
 	remote->sll_halen = ETH_ALEN;
 	addr->toOctetArray( remote->sll_addr );
 
 	if( timestamp ) {
-#ifndef ARCH_INTELCE	   
+#ifndef ARCH_INTELCE
 		net_lock.lock();
 #endif
 		err = sendto
@@ -101,18 +108,17 @@ net_result LinuxNetworkInterface::send
   }
 	delete remote;
 	if( err == -1 ) {
-		XPTPD_ERROR( "Failed to send: %s(%d)", strerror(errno), errno );
+		GPTP_LOG_ERROR( "Failed to send: %s(%d)", strerror(errno), errno );
 		return net_fatal;
 	}
 	return net_succeed;
 }
 
 
-void LinuxNetworkInterface::disable_clear_rx_queue() {
+void LinuxNetworkInterface::disable_rx_queue() {
 	struct packet_mreq mr_8021as;
 	int err;
-	char buf[256];
-	
+
 	if( !net_lock.lock() ) {
 		fprintf( stderr, "D rx lock failed\n" );
 		_exit(0);
@@ -127,20 +133,21 @@ void LinuxNetworkInterface::disable_clear_rx_queue() {
 		( sd_event, SOL_PACKET, PACKET_DROP_MEMBERSHIP, &mr_8021as,
 		  sizeof( mr_8021as ));
 	if( err == -1 ) {
-		XPTPD_ERROR
+		GPTP_LOG_ERROR
 			( "Unable to add PTP multicast addresses to port id: %u",
 			  ifindex );
 		return;
 	}
-  
-	while( recvfrom( sd_event, buf, 256, MSG_DONTWAIT, NULL, 0 ) != -1 );
-	
+
 	return;
 }
 
-void LinuxNetworkInterface::reenable_rx_queue() {
+void LinuxNetworkInterface::clear_reenable_rx_queue() {
 	struct packet_mreq mr_8021as;
+	char buf[256];
 	int err;
+
+	while( recvfrom( sd_event, buf, 256, MSG_DONTWAIT, NULL, 0 ) != -1 );
 
 	memset( &mr_8021as, 0, sizeof( mr_8021as ));
 	mr_8021as.mr_ifindex = ifindex;
@@ -151,7 +158,7 @@ void LinuxNetworkInterface::reenable_rx_queue() {
 		( sd_event, SOL_PACKET, PACKET_ADD_MEMBERSHIP, &mr_8021as,
 		  sizeof( mr_8021as ));
 	if( err == -1 ) {
-		XPTPD_ERROR
+		GPTP_LOG_ERROR
 			( "Unable to add PTP multicast addresses to port id: %u",
 			  ifindex );
 		return;
@@ -161,6 +168,95 @@ void LinuxNetworkInterface::reenable_rx_queue() {
 		fprintf( stderr, "D failed unlock rx lock, %d\n", err );
 	}
 }
+
+static void x_readEvent(int sockint, IEEE1588Port *pPort)
+{
+	int status;
+	char buf[4096];
+	struct iovec iov = { buf, sizeof buf };
+	struct sockaddr_nl snl;
+	struct msghdr msg = { (void *) &snl, sizeof snl, &iov, 1, NULL, 0, 0 };
+	struct nlmsghdr *msgHdr;
+	struct ifinfomsg *ifi;
+
+	status = recvmsg(sockint, &msg, 0);
+
+	if (status < 0) {
+		GPTP_LOG_ERROR("read_netlink: Error recvmsg: %d", status);
+		return;
+	}
+
+	if (status == 0) {
+		GPTP_LOG_ERROR("read_netlink: EOF");
+		return;
+	}
+
+	// Process the NETLINK messages
+	for (msgHdr = (struct nlmsghdr *)buf; NLMSG_OK(msgHdr, (unsigned int)status); msgHdr = NLMSG_NEXT(msgHdr, status))
+	{
+		if (msgHdr->nlmsg_type == NLMSG_DONE)
+			return;
+
+		if (msgHdr->nlmsg_type == NLMSG_ERROR) {
+			GPTP_LOG_ERROR("netlink message error");
+			return;
+		}
+
+		if (msgHdr->nlmsg_type == RTM_NEWLINK) {
+			ifi = (struct ifinfomsg *)NLMSG_DATA(msgHdr);
+			if ((ifi->ifi_flags & IFF_RUNNING)) {
+				pPort->processEvent(LINKUP);
+			}
+			else {
+				pPort->processEvent(LINKDOWN);
+			}
+		}
+	}
+	return;
+}
+
+void LinuxNetworkInterface::watchNetLink(IEEE1588Port *pPort)
+{
+	fd_set netLinkFD;
+	int netLinkSocket;
+
+	struct sockaddr_nl addr;
+
+	netLinkSocket = socket (AF_NETLINK, SOCK_RAW, NETLINK_ROUTE);
+	if (netLinkSocket < 0) {
+		GPTP_LOG_ERROR("NETLINK socket open error");
+		return;
+	}
+
+	memset((void *) &addr, 0, sizeof (addr));
+
+	addr.nl_family = AF_NETLINK;
+	addr.nl_pid = getpid ();
+	addr.nl_groups = RTMGRP_LINK;
+
+	if (bind (netLinkSocket, (struct sockaddr *) &addr, sizeof (addr)) < 0) {
+		GPTP_LOG_ERROR("Socket bind failed");
+		return;
+	}
+
+	while (1) {
+		FD_ZERO(&netLinkFD);
+		FD_CLR(netLinkSocket, &netLinkFD);
+		FD_SET(netLinkSocket, &netLinkFD);
+
+		// Wait forever for a net link event
+		int retval = select(FD_SETSIZE, &netLinkFD, NULL, NULL, NULL);
+		if (retval == -1)
+			; // Error on select. We will ignore and keep going
+		else if (retval) {
+			x_readEvent(netLinkSocket, pPort);
+		}
+		else {
+			; // Would be timeout but Won't happen because we wait forever
+		}
+	}
+}
+
 
 struct LinuxTimerQueuePrivate {
 	pthread_t signal_thread;
@@ -192,9 +288,9 @@ void *LinuxTimerQueueHandler( void *arg ) {
 	sigset_t waitfor;
 	struct timespec timeout;
 	timeout.tv_sec = 0; timeout.tv_nsec = 100000000; /* 100 ms */
-	
+
 	sigemptyset( &waitfor );
-	
+
 	while( !timerq->stop ) {
 		siginfo_t info;
 		LinuxTimerQueueMap_t::iterator iter;
@@ -212,6 +308,9 @@ void *LinuxTimerQueueHandler( void *arg ) {
 		    struct LinuxTimerQueueActionArg *arg = iter->second;
 			timerq->timerQueueMap.erase(iter);
 			timerq->LinuxTimerQueueAction( arg );
+			if( arg->rm ) {
+				delete arg->inner_arg;
+			}
 			timer_delete(arg->timer_handle);
 			delete arg;
 		}
@@ -251,7 +350,7 @@ OSTimerQueue *LinuxTimerQueueFactory::createOSTimerQueue
 	return ret;
 }
 
-	
+
 
 bool LinuxTimerQueue::addEvent
 ( unsigned long micros, int type, ostimerq_handler func,
@@ -266,13 +365,12 @@ bool LinuxTimerQueue::addEvent
 	outer_arg->rm = rm;
 	outer_arg->func = func;
 	outer_arg->type = type;
-	outer_arg->rm = rm;
 
 	// Find key that we can use
 	while( timerQueueMap.find( key ) != timerQueueMap.end() ) {
 		++key;
 	}
-		
+
 	{
 		struct itimerspec its;
 		memset(&(outer_arg->sevp), 0, sizeof(outer_arg->sevp));
@@ -282,7 +380,7 @@ bool LinuxTimerQueue::addEvent
 		if ( timer_create
 			 (CLOCK_MONOTONIC, &outer_arg->sevp, &outer_arg->timer_handle)
 			 == -1) {
-			XPTPD_ERROR("timer_create failed - %s", strerror(errno));
+			GPTP_LOG_ERROR("timer_create failed - %s", strerror(errno));
 			return false;
 		}
 		timerQueueMap[key] = outer_arg;
@@ -293,7 +391,7 @@ bool LinuxTimerQueue::addEvent
 		err = timer_settime( outer_arg->timer_handle, 0, &its, NULL );
 		if( err < 0 ) {
 			fprintf
-				( stderr, "Failed to arm timer: %s\n", 
+				( stderr, "Failed to arm timer: %s\n",
 				  strerror( errno ));
 			return false;
 		}
@@ -354,7 +452,7 @@ unsigned long LinuxTimer::sleep(unsigned long micros) {
 
 struct TicketingLockPrivate {
 	pthread_cond_t condition;
-	pthread_mutex_t cond_lock;      
+	pthread_mutex_t cond_lock;
 };
 
 bool TicketingLock::lock( bool *got ) {
@@ -362,7 +460,7 @@ bool TicketingLock::lock( bool *got ) {
 	bool yield = false;
 	bool ret = true;
 	if( !init_flag ) return false;
-	
+
 	if( pthread_mutex_lock( &_private->cond_lock ) != 0 ) {
 		ret = false;
 		goto done;
@@ -383,15 +481,15 @@ bool TicketingLock::lock( bool *got ) {
 	}
 
 	if( got != NULL ) *got = true;
-	
+
  unlock:
 	if( pthread_mutex_unlock( &_private->cond_lock ) != 0 ) {
 		ret = false;
 		goto done;
 	}
-		
+
 	if( yield ) pthread_yield();
-	
+
  done:
 	return ret;
 }
@@ -399,7 +497,7 @@ bool TicketingLock::lock( bool *got ) {
 bool TicketingLock::unlock() {
 	bool ret = true;
 	if( !init_flag ) return false;
-		
+
 	if( pthread_mutex_lock( &_private->cond_lock ) != 0 ) {
 		ret = false;
 		goto done;
@@ -434,7 +532,7 @@ bool TicketingLock::init() {
 	cond_ticket_issue = 0;
 	cond_ticket_serving = 0;
 	init_flag = true;
-    
+
 	return true;
 }
 
@@ -465,7 +563,7 @@ bool LinuxLock::initialize( OSLockType type ) {
 		pthread_mutexattr_settype(&_private->mta, PTHREAD_MUTEX_RECURSIVE);
 	lock_c = pthread_mutex_init(&_private->mutex,&_private->mta);
 	if(lock_c != 0) {
-		XPTPD_ERROR("Mutex initialization failed - %s\n",strerror(errno));
+		GPTP_LOG_ERROR("Mutex initialization failed - %s",strerror(errno));
 		return oslock_fail;
 	}
 	return oslock_ok;
@@ -482,7 +580,7 @@ OSLockResult LinuxLock::lock() {
 	int lock_c;
 	lock_c = pthread_mutex_lock(&_private->mutex);
 	if(lock_c != 0) {
-		fprintf( stderr, "LinuxLock: lock failed %d\n", lock_c );  
+		fprintf( stderr, "LinuxLock: lock failed %d\n", lock_c );
 		return oslock_fail;
 	}
 	return oslock_ok;
@@ -499,7 +597,7 @@ OSLockResult LinuxLock::unlock() {
 	int lock_c;
 	lock_c = pthread_mutex_unlock(&_private->mutex);
 	if(lock_c != 0) {
-		fprintf( stderr, "LinuxLock: unlock failed %d\n", lock_c );  
+		fprintf( stderr, "LinuxLock: unlock failed %d\n", lock_c );
 		return oslock_fail;
 	}
 	return oslock_ok;
@@ -568,7 +666,7 @@ bool LinuxThread::start(OSThreadFunction function, void *arg) {
 	sigaddset(&set, SIGALRM);
 	err = pthread_sigmask(SIG_BLOCK, &set, &oset);
 	if (err != 0) {
-		XPTPD_ERROR
+		GPTP_LOG_ERROR
 			("Add timer pthread_sigmask( SIG_BLOCK ... )");
 		return false;
 	}
@@ -579,7 +677,7 @@ bool LinuxThread::start(OSThreadFunction function, void *arg) {
 	sigdelset(&oset, SIGALRM);
 	err = pthread_sigmask(SIG_SETMASK, &oset, NULL);
 	if (err != 0) {
-		XPTPD_ERROR
+		GPTP_LOG_ERROR
 			("Add timer pthread_sigmask( SIG_SETMASK ... )");
 		return false;
 	}
@@ -615,12 +713,14 @@ bool LinuxSharedMemoryIPC::init( OS_IPC_ARG *barg ) {
 	struct group *grp;
 	const char *group_name;
 	pthread_mutexattr_t shared;
+	mode_t oldumask = umask(0);
+
 	if( barg == NULL ) {
 		group_name = DEFAULT_GROUPNAME;
 	} else {
 		arg = dynamic_cast<LinuxIPCArg *> (barg);
 		if( arg == NULL ) {
-			XPTPD_ERROR( "Wrong IPC init arg type" );
+			GPTP_LOG_ERROR( "Wrong IPC init arg type" );
 			goto exit_error;
 		} else {
 			group_name = arg->group_name;
@@ -628,33 +728,34 @@ bool LinuxSharedMemoryIPC::init( OS_IPC_ARG *barg ) {
 	}
 	grp = getgrnam( group_name );
 	if( grp == NULL ) {
-		XPTPD_ERROR( "Group %s not found, will try root (0) instead", group_name );
+		GPTP_LOG_ERROR( "Group %s not found, will try root (0) instead", group_name );
 	}
-		
+
 	shm_fd = shm_open( SHM_NAME, O_RDWR | O_CREAT, 0660 );
 	if( shm_fd == -1 ) {
-		XPTPD_ERROR( "shm_open(): %s", strerror(errno) );
+		GPTP_LOG_ERROR( "shm_open(): %s", strerror(errno) );
 		goto exit_error;
 	}
+	(void) umask(oldumask);
 	if (fchown(shm_fd, -1, grp != NULL ? grp->gr_gid : 0) < 0) {
-		XPTPD_ERROR("shm_open(): Failed to set ownership");
+		GPTP_LOG_ERROR("shm_open(): Failed to set ownership");
 	}
 	if( ftruncate( shm_fd, SHM_SIZE ) == -1 ) {
-		XPTPD_ERROR( "ftruncate()" );
+		GPTP_LOG_ERROR( "ftruncate()" );
 		goto exit_unlink;
 	}
 	master_offset_buffer = (char *) mmap
 		( NULL, SHM_SIZE, PROT_READ | PROT_WRITE, MAP_LOCKED | MAP_SHARED,
 		  shm_fd, 0 );
 	if( master_offset_buffer == (char *) -1 ) {
-		XPTPD_ERROR( "mmap()" );
+		GPTP_LOG_ERROR( "mmap()" );
 		goto exit_unlink;
 	}
 	/*create mutex attr */
 	err = pthread_mutexattr_init(&shared);
 	if(err != 0) {
-		XPTPD_ERROR
-			("mutex attr initialization failed - %s\n",
+		GPTP_LOG_ERROR
+			("mutex attr initialization failed - %s",
 			 strerror(errno));
 		goto exit_unlink;
 	}
@@ -662,14 +763,14 @@ bool LinuxSharedMemoryIPC::init( OS_IPC_ARG *barg ) {
 	/*create a mutex */
 	err = pthread_mutex_init((pthread_mutex_t *) master_offset_buffer, &shared);
 	if(err != 0) {
-		XPTPD_ERROR
-			("sharedmem - Mutex initialization failed - %s\n",
+		GPTP_LOG_ERROR
+			("sharedmem - Mutex initialization failed - %s",
 			 strerror(errno));
 		goto exit_unlink;
 	}
 	return true;
  exit_unlink:
-	shm_unlink( SHM_NAME ); 
+	shm_unlink( SHM_NAME );
  exit_error:
 	return false;
 }
@@ -677,8 +778,9 @@ bool LinuxSharedMemoryIPC::init( OS_IPC_ARG *barg ) {
 bool LinuxSharedMemoryIPC::update
 (int64_t ml_phoffset, int64_t ls_phoffset, FrequencyRatio ml_freqoffset,
  FrequencyRatio ls_freqoffset, uint64_t local_time, uint32_t sync_count,
- uint32_t pdelay_count, PortState port_state ) {
+ uint32_t pdelay_count, PortState port_state, bool asCapable ) {
 	int buf_offset = 0;
+	pid_t process_id = getpid();
 	char *shm_buffer = master_offset_buffer;
 	gPtpTimeData *ptimedata;
 	if( shm_buffer != NULL ) {
@@ -693,7 +795,9 @@ bool LinuxSharedMemoryIPC::update
 		ptimedata->local_time = local_time;
 		ptimedata->sync_count   = sync_count;
 		ptimedata->pdelay_count = pdelay_count;
+        ptimedata->asCapable = asCapable;
 		ptimedata->port_state   = port_state;
+		ptimedata->process_id   = process_id;
 		/* unlock */
 		pthread_mutex_unlock((pthread_mutex_t *) shm_buffer);
 	}
@@ -716,46 +820,46 @@ bool LinuxNetworkInterfaceFactory::createInterface
 	struct packet_mreq mr_8021as;
 	LinkLayerAddress addr;
 	int ifindex;
-		
+
 	LinuxNetworkInterface *net_iface_l = new LinuxNetworkInterface();
-		
+
 	if( !net_iface_l->net_lock.init()) {
-		XPTPD_ERROR( "Failed to initialize network lock");
+		GPTP_LOG_ERROR( "Failed to initialize network lock");
 		return false;
 	}
-		
+
 	InterfaceName *ifname = dynamic_cast<InterfaceName *>(label);
 	if( ifname == NULL ){
-		XPTPD_ERROR( "ifname == NULL");
+		GPTP_LOG_ERROR( "ifname == NULL");
 		return false;
 	}
-		
+
 	net_iface_l->sd_general = socket( PF_PACKET, SOCK_DGRAM, 0 );
 	if( net_iface_l->sd_general == -1 ) {
-		XPTPD_ERROR( "failed to open general socket: %s", strerror(errno));
+		GPTP_LOG_ERROR( "failed to open general socket: %s", strerror(errno));
 		return false;
 	}
 	net_iface_l->sd_event = socket( PF_PACKET, SOCK_DGRAM, 0 );
 	if( net_iface_l->sd_event == -1 ) {
-		XPTPD_ERROR
-			( "failed to open event socket: %s \n", strerror(errno));
+		GPTP_LOG_ERROR
+			( "failed to open event socket: %s ", strerror(errno));
 		return false;
 	}
-		
+
 	memset( &device, 0, sizeof(device));
 	ifname->toString( device.ifr_name, IFNAMSIZ );
 	err = ioctl( net_iface_l->sd_event, SIOCGIFHWADDR, &device );
 	if( err == -1 ) {
-		XPTPD_ERROR
+		GPTP_LOG_ERROR
 			( "Failed to get interface address: %s", strerror( errno ));
 		return false;
 	}
-		
+
 	addr = LinkLayerAddress( (uint8_t *)&device.ifr_hwaddr.sa_data );
 	net_iface_l->local_addr = addr;
 	err = ioctl( net_iface_l->sd_event, SIOCGIFINDEX, &device );
 	if( err == -1 ) {
-		XPTPD_ERROR
+		GPTP_LOG_ERROR
 			( "Failed to get interface index: %s", strerror( errno ));
 		return false;
 	}
@@ -770,37 +874,36 @@ bool LinuxNetworkInterfaceFactory::createInterface
 		( net_iface_l->sd_event, SOL_PACKET, PACKET_ADD_MEMBERSHIP,
 		  &mr_8021as, sizeof( mr_8021as ));
 	if( err == -1 ) {
-		XPTPD_ERROR
+		GPTP_LOG_ERROR
 			( "Unable to add PTP multicast addresses to port id: %u",
 			  ifindex );
 		return false;
 	}
-		
+
 	memset( &ifsock_addr, 0, sizeof( ifsock_addr ));
 	ifsock_addr.sll_family = AF_PACKET;
 	ifsock_addr.sll_ifindex = ifindex;
 	ifsock_addr.sll_protocol = PLAT_htons( PTP_ETHERTYPE );
 	err = bind
 		( net_iface_l->sd_event, (sockaddr *) &ifsock_addr,
-		  sizeof( ifsock_addr ));	
-	if( err == -1 ) { 
-		XPTPD_ERROR( "Call to bind() failed: %s", strerror(errno) );
+		  sizeof( ifsock_addr ));
+	if( err == -1 ) {
+		GPTP_LOG_ERROR( "Call to bind() failed: %s", strerror(errno) );
 		return false;
 	}
-		
+
 	net_iface_l->timestamper =
 		dynamic_cast <LinuxTimestamper *>(timestamper);
 	if(net_iface_l->timestamper == NULL) {
-		XPTPD_ERROR( "timestamper == NULL\n" );
+		GPTP_LOG_ERROR( "timestamper == NULL" );
 		return false;
 	}
 	if( !net_iface_l->timestamper->post_init
 		( ifindex, net_iface_l->sd_event, &net_iface_l->net_lock )) {
-		XPTPD_ERROR( "post_init failed\n" );
+		GPTP_LOG_ERROR( "post_init failed\n" );
 		return false;
 	}
 	*net_iface = net_iface_l;
-		
+
 	return true;
 }
-

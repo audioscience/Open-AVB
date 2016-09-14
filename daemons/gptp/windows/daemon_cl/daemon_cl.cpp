@@ -38,6 +38,7 @@ POSSIBILITY OF SUCH DAMAGE.
 #include "avbts_osnet.hpp"
 #include "avbts_oslock.hpp"
 #include "windows_hal.hpp"
+#include "avbts_message.hpp"
 #include <tchar.h>
 
 #define MACSTR_LENGTH 17
@@ -47,7 +48,8 @@ static bool exit_flag;
 void print_usage( char *arg0 ) {
 	fprintf( stderr,
 		"%s "
-		"[-R <priority 1>] <network interface>\n",
+		"[-R <priority 1>] <network interface>\n"
+		"where <network interface> is a MAC address entered as xx-xx-xx-xx-xx-xx\n",
 		arg0 );
 }
 
@@ -78,30 +80,57 @@ int parseMacAddr( _TCHAR *macstr, uint8_t *octet_string ) {
 
 int _tmain(int argc, _TCHAR* argv[])
 {
-	bool force_slave = false;
-	int32_t offset = 0;
+	IEEE1588PortInit_t portInit;
+
+	portInit.clock = NULL;
+	portInit.index = 1;
+	portInit.forceSlave = false;
+	portInit.timestamper = NULL;
+	portInit.offset = 0;
+	portInit.net_label = NULL;
+	portInit.automotive_profile = false;
+	portInit.isGM = false;
+	portInit.testMode = false;
+	portInit.initialLogSyncInterval = LOG2_INTERVAL_INVALID;
+	portInit.initialLogPdelayReqInterval = LOG2_INTERVAL_INVALID;
+	portInit.operLogPdelayReqInterval = LOG2_INTERVAL_INVALID;
+	portInit.operLogSyncInterval = LOG2_INTERVAL_INVALID;
+	portInit.condition_factory = NULL;
+	portInit.thread_factory = NULL;
+	portInit.timer_factory = NULL;
+	portInit.lock_factory = NULL;
+
 	bool syntonize = false;
 	uint8_t priority1 = 248;
 	int i;
+	int phy_delays[4] =	{ -1, -1, -1, -1 };
 
 	// Register default network interface
 	WindowsPCAPNetworkInterfaceFactory *default_factory = new WindowsPCAPNetworkInterfaceFactory();
 	OSNetworkInterfaceFactory::registerFactory( factory_name_t( "default" ), default_factory );
 
 	// Create thread, lock, timer, timerq factories
-	WindowsThreadFactory *thread_factory = new WindowsThreadFactory();
-	WindowsTimerQueueFactory *timerq_factory = new WindowsTimerQueueFactory();
-	WindowsLockFactory *lock_factory = new WindowsLockFactory();
-	WindowsTimerFactory *timer_factory = new WindowsTimerFactory();
-	WindowsConditionFactory *condition_factory = new WindowsConditionFactory();
+	portInit.thread_factory = new WindowsThreadFactory();
+	portInit.lock_factory = new WindowsLockFactory();
+	portInit.timer_factory = new WindowsTimerFactory();
+	portInit.condition_factory = new WindowsConditionFactory();
 	WindowsNamedPipeIPC *ipc = new WindowsNamedPipeIPC();
+	WindowsTimerQueueFactory *timerq_factory = new WindowsTimerQueueFactory();
+
 	if( !ipc->init() ) {
 		delete ipc;
 		ipc = NULL;
 	}
 
+	// If there are no arguments, output usage
+	if (1 == argc) {
+		print_usage(argv[0]);
+		return -1;
+	}
+
+
 	/* Process optional arguments */
-	for( i = 1; i < argc-1; ++i ) {
+	for( i = 1; i < argc; ++i ) {
 		if( ispunct(argv[i][0]) ) {
 			if( toupper( argv[i][1] ) == 'H' ) {
 				print_usage( argv[0] );
@@ -124,23 +153,21 @@ int _tmain(int argc, _TCHAR* argv[])
 		}
 	}
 
+	// the last argument is supposed to be a MAC address, so decrement argv index to read it
+	i--;
+
 	// Create Low level network interface object
 	uint8_t local_addr_ostr[ETHER_ADDR_OCTETS];
-	if( i >= argc ) {
-		print_usage( argv[0] );
-		return -1;
-	}
 	parseMacAddr( argv[i], local_addr_ostr );
 	LinkLayerAddress local_addr(local_addr_ostr);
-
+	portInit.net_label = &local_addr;
 	// Create HWTimestamper object
-	HWTimestamper *timestamper = new WindowsTimestamper();
+	portInit.timestamper = new WindowsTimestamper();
 	// Create Clock object
-	IEEE1588Clock *clock = new IEEE1588Clock( false, false, priority1, timestamper, timerq_factory, ipc, lock_factory );  // Do not force slave
+	portInit.clock = new IEEE1588Clock( false, false, priority1, portInit.timestamper, timerq_factory, ipc, portInit.lock_factory );  // Do not force slave
 	// Create Port Object linked to clock and low level
-	IEEE1588Port *port = new IEEE1588Port( clock, 1, false, 0, timestamper, 0, &local_addr,
-		condition_factory, thread_factory, timer_factory, lock_factory );
-	if( !port->init_port() ) {
+	IEEE1588Port *port = new IEEE1588Port( &portInit );
+	if (!port->init_port(phy_delays)) {
 		printf( "Failed to initialize port\n" );
 		return -1;
 	}

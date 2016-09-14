@@ -6,16 +6,16 @@
   Redistribution and use in source and binary forms, with or without
   modification, are permitted provided that the following conditions are met:
 
-   1. Redistributions of source code must retain the above copyright notice,
-      this list of conditions and the following disclaimer.
+  1. Redistributions of source code must retain the above copyright notice,
+  this list of conditions and the following disclaimer.
 
-   2. Redistributions in binary form must reproduce the above copyright
-      notice, this list of conditions and the following disclaimer in the
-      documentation and/or other materials provided with the distribution.
+  2. Redistributions in binary form must reproduce the above copyright
+  notice, this list of conditions and the following disclaimer in the
+  documentation and/or other materials provided with the distribution.
 
-   3. Neither the name of the Intel Corporation nor the names of its
-      contributors may be used to endorse or promote products derived from
-      this software without specific prior written permission.
+  3. Neither the name of the Intel Corporation nor the names of its
+  contributors may be used to endorse or promote products derived from
+  this software without specific prior written permission.
 
   THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
   AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
@@ -29,10 +29,15 @@
   ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
   POSSIBILITY OF SUCH DAMAGE.
 
-******************************************************************************/
+ ******************************************************************************/
 
-#include <avbts_osnet.hpp>
+#ifndef LINUXIPC_HPP
+#define LINUXIPC_HPP
 
-std::map
-< factory_name_t, OSNetworkInterfaceFactory * >
-OSNetworkInterfaceFactory::factoryMap;
+#include "ipcdef.hpp"
+
+#define SHM_SIZE (sizeof(gPtpTimeData) + sizeof(pthread_mutex_t))   /*!< Shared memory size*/
+#define SHM_NAME  "/ptp"                                            /*!< Shared memory name*/
+
+
+#endif /*LINUXPIC_HPP*/
