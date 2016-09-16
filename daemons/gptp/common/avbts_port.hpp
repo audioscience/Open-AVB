@@ -1364,11 +1364,19 @@ class IEEE1588Port {
 
 	/**
 	 * @brief  Sets the neighbor propagation delay threshold
-	 * @param  delay Delay in nanoseconds
+	 * @param  delay Delay threshold in nanoseconds
 	 * @return void
 	 */
 	void setNeighPropDelayThresh(int64_t delay) {
 		neighbor_prop_delay_thresh = delay;
+	}
+
+	/**
+	* @brief  Gets the neighbor propagation delay threshold
+	* @return Delay threshold in nanoseconds
+	*/
+	int64_t getNeighPropDelayThresh(void) {
+		return neighbor_prop_delay_thresh;
 	}
 
 	/**
