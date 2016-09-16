@@ -1645,7 +1645,8 @@ void PTPMessagePathDelayRespFollowUp::processMessage(IEEE1588Port * port)
 	}
 	if( !port->setLinkDelay( link_delay ) ) {
 		if (!port->getAutomotiveProfile()) {
-			GPTP_LOG_ERROR("Link delay %ld beyond neighborPropDelayThresh; not AsCapable", link_delay);
+			GPTP_LOG_ERROR("Link delay %lld beyond neighborPropDelayThresh (%lld); not AsCapable",
+				link_delay, port->getNeighPropDelayThresh());
 			port->setAsCapable( false );
 		}
 	} else {
