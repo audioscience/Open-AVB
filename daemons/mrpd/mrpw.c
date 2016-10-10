@@ -601,7 +601,7 @@ int mrpd_send_ctl_msg(struct client_s *client,
 	printf("CTL MSG:%s to CLNT %d\n", notify_data, client->addr.in.sin_port);
 #endif
 	rc = sendto(control_socket, notify_data, notify_len,
-		    0, &client->addr.sa, CLINT_SOCKADDR_LEN(client));
+		0, &client->addr.sa, sizeof(struct sockaddr));
 	return rc;
 }
 
@@ -656,8 +656,10 @@ int init_local_ctl(void)
 
 	rc = bind(sock_fd, (struct sockaddr *)&addr, sizeof(addr));
 
-	if (rc == SOCKET_ERROR)
+	if (rc == SOCKET_ERROR) {
+		printf("bind() error %d\n", WSAGetLastError());
 		goto out;
+	}
 
 	control_socket = sock_fd;
 
@@ -681,7 +683,7 @@ DWORD WINAPI ctl_thread(LPVOID lpParam)
 	int client_len;
 
 	while (WaitForSingleObject(sem_kill_localhost_thread, 0)) {
-		client_len = sizeof(client.addr);
+		client_len = sizeof(struct sockaddr_in);
 		s.msgbuf = (char *)malloc(MAX_MRPD_CMDSZ);
 		s.bytes =
 		    recvfrom(control_socket, s.msgbuf, MAX_MRPD_CMDSZ, 0,

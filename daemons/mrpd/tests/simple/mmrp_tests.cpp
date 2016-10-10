@@ -63,7 +63,7 @@ extern "C"
 
 #define STREAM_DA                "010203040506"
 
-static struct sockaddr_in client;
+static struct client_s client;
 
 TEST_GROUP(MmrpTestGroup)
 {

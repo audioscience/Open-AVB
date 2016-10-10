@@ -242,7 +242,7 @@ static unsigned char pkt2[] = {
                      ",P=" PRIORITY_AND_RANK \
                      ",L=" ACCUMULATED_LATENCY
 
-static struct sockaddr_in client;
+static struct client_s client;
 
 int msrp_tests_event_counts_per_type(int the_type, int the_event)
 {
@@ -502,8 +502,8 @@ TEST(MsrpTestGroup, TxLVA_TalkerAdv_count_64)
  */
 TEST(MsrpTestGroup, Multiple_Clients)
 {
-	static struct sockaddr_in client1;
-	static struct sockaddr_in client2;
+	static struct client_s client1;
+	static struct client_s client2;
 
 	memset(&client1, 0, sizeof(client1));
 	memset(&client2, 1, sizeof(client2));

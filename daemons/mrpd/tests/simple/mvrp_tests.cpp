@@ -61,7 +61,7 @@ extern "C"
 
 }
 
-static struct sockaddr_in client;
+static struct client_s client;
 
 TEST_GROUP(MvrpTestGroup)
 {
