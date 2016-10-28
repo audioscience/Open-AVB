@@ -795,7 +795,7 @@ int mmrp_recv_msg()
 
 int
 mmrp_emit_svcvectors(unsigned char *msgbuf, unsigned char *msgbuf_eof,
-		     int *bytes_used, int lva)
+		     size_t *bytes_used, int lva)
 {
 	mrpdu_vectorattrib_t *mrpdu_vectorptr;
 	uint16_t numvalues;
@@ -1038,7 +1038,7 @@ mmrp_emit_svcvectors(unsigned char *msgbuf, unsigned char *msgbuf_eof,
 
 int
 mmrp_emit_macvectors(unsigned char *msgbuf, unsigned char *msgbuf_eof,
-		     int *bytes_used, int lva)
+		     size_t *bytes_used, int lva)
 {
 	mrpdu_vectorattrib_t *mrpdu_vectorptr;
 	mrpdu_message_t *mrpdu_msg;
@@ -1270,7 +1270,7 @@ int mmrp_txpdu(void)
 {
 	unsigned char *msgbuf, *msgbuf_wrptr;
 	int msgbuf_len;
-	int bytes = 0;
+	size_t bytes = 0;
 	eth_hdr_t *eth;
 	mrpdu_t *mrpdu;
 	unsigned char *mrpdu_msg_ptr;
@@ -1379,7 +1379,7 @@ int mmrp_txpdu(void)
 	} else
 		goto out;
 
-	msgbuf_len = mrpdu_msg_ptr - msgbuf;
+	msgbuf_len = (int)(mrpdu_msg_ptr - msgbuf);
 
 	bytes = mrpd_send(mmrp_socket, msgbuf, msgbuf_len, 0);
 #if LOG_MMRP

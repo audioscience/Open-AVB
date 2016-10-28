@@ -1927,7 +1927,7 @@ int msrp_recv_msg()
 
 int
 msrp_emit_domainvectors(unsigned char *msgbuf, unsigned char *msgbuf_eof,
-			int *bytes_used, int lva)
+			size_t *bytes_used, int lva)
 {
 	mrpdu_vectorattrib_t *mrpdu_vectorptr;
 	uint16_t numvalues;
@@ -2184,7 +2184,7 @@ msrp_emit_domainvectors(unsigned char *msgbuf, unsigned char *msgbuf_eof,
 
 	*bytes_used = (mrpdu_msg_ptr - msgbuf);
 
-	attriblistlen = mrpdu_msg_ptr - &(mrpdu_msg->Data[2]);
+	attriblistlen = (int)( mrpdu_msg_ptr - &(mrpdu_msg->Data[2]) );
 	mrpdu_msg->Data[0] = (uint8_t) (attriblistlen >> 8);
 	mrpdu_msg->Data[1] = (uint8_t) attriblistlen;
 
@@ -2225,7 +2225,7 @@ static int vectorize_talker(struct msrp_attribute *first_attrib,
 
 int
 msrp_emit_talkervectors(unsigned char *msgbuf, unsigned char *msgbuf_eof,
-		      int *bytes_used, int lva, unsigned int type)
+		      size_t *bytes_used, int lva, unsigned int type)
 {
 	mrpdu_vectorattrib_t *mrpdu_vectorptr;
 	uint16_t numvalues;
@@ -2533,7 +2533,7 @@ msrp_emit_talkervectors(unsigned char *msgbuf, unsigned char *msgbuf_eof,
 
 	*bytes_used = (mrpdu_msg_ptr - msgbuf);
 
-	attriblistlen = mrpdu_msg_ptr - &(mrpdu_msg->Data[2]);
+	attriblistlen = (int)( mrpdu_msg_ptr - &(mrpdu_msg->Data[2]) );
 	mrpdu_msg->Data[0] = (uint8_t) (attriblistlen >> 8);
 	mrpdu_msg->Data[1] = (uint8_t) attriblistlen;
 	return 0;
@@ -2545,7 +2545,7 @@ msrp_emit_talkervectors(unsigned char *msgbuf, unsigned char *msgbuf_eof,
 
 int
 msrp_emit_listenvectors(unsigned char *msgbuf, unsigned char *msgbuf_eof,
-			int *bytes_used, int lva)
+			size_t *bytes_used, int lva)
 {
 	mrpdu_vectorattrib_t *mrpdu_vectorptr;
 	mrpdu_message_t *mrpdu_msg;
@@ -2896,7 +2896,7 @@ msrp_emit_listenvectors(unsigned char *msgbuf, unsigned char *msgbuf_eof,
 
 	*bytes_used = (mrpdu_msg_ptr - msgbuf);
 
-	attriblistlen = mrpdu_msg_ptr - &(mrpdu_msg->Data[2]);
+	attriblistlen = (int)( mrpdu_msg_ptr - &(mrpdu_msg->Data[2]) );
 	mrpdu_msg->Data[0] = (uint8_t) (attriblistlen >> 8);
 	mrpdu_msg->Data[1] = (uint8_t) attriblistlen;
 
@@ -2914,7 +2914,7 @@ int msrp_txpdu(void)
 {
 	unsigned char *msgbuf, *msgbuf_wrptr;
 	int msgbuf_len;
-	int bytes = 0;
+	size_t bytes = 0;
 	eth_hdr_t *eth;
 	mrpdu_t *mrpdu;
 	unsigned char *mrpdu_msg_ptr;
@@ -2990,7 +2990,7 @@ int msrp_txpdu(void)
 	} else
 		goto out;
 
-	msgbuf_len = mrpdu_msg_ptr - msgbuf;
+	msgbuf_len = (int)(mrpdu_msg_ptr - msgbuf);
 
 	bytes = mrpd_send(msrp_socket, msgbuf, msgbuf_len, 0);
 #if LOG_MSRP
