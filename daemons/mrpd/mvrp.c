@@ -885,7 +885,7 @@ mvrp_emit_vidvectors(unsigned char *msgbuf, unsigned char *msgbuf_eof,
 int mvrp_txpdu(void)
 {
 	unsigned char *msgbuf, *msgbuf_wrptr;
-	int msgbuf_len;
+	size_t msgbuf_len;
 	size_t bytes = 0;
 	eth_hdr_t *eth;
 	mrpdu_t *mrpdu;
@@ -981,7 +981,7 @@ int mvrp_txpdu(void)
 	} else
 		goto out;
 
-	msgbuf_len = (int)(mrpdu_msg_ptr - msgbuf);
+	msgbuf_len = mrpdu_msg_ptr - msgbuf;
 
 	bytes = mrpd_send(mvrp_socket, msgbuf, msgbuf_len, 0);
 #if LOG_MVRP
