@@ -141,6 +141,7 @@ enum MessageType {
 	ANNOUNCE_MESSAGE = 0xB,
 	SIGNALLING_MESSAGE = 0xC,
 	MANAGEMENT_MESSAGE = 0xD,
+	NULL_MESSAGE = 0xff
 };
 
 /**
