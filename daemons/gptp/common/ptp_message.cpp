@@ -41,6 +41,11 @@
 #include <string.h>
 #include <math.h>
 
+void gptp_debug_record(
+	const Timestamp &remote_req_rx_timestamp,
+	const Timestamp &remote_resp_tx_timestamp,
+	uint32_t ppb);
+
 PTPMessageCommon::PTPMessageCommon(IEEE1588Port * port)
 {
 	// Fill in fields using port/clock dataset as a template
@@ -1620,6 +1625,14 @@ void PTPMessagePathDelayRespFollowUp::processMessage(IEEE1588Port * port)
 	/* Subtract turn-around time from link delay after rate adjustment */
 	link_delay -= turn_around;
 	link_delay /= 2;
+
+#if 1
+	gptp_debug_record(
+		remote_req_rx_timestamp,
+		remote_resp_tx_timestamp,
+		(uint32_t)((port->getPeerRateOffset() - 1) * 1000000000000)
+		);
+#endif
 
 	{
 		uint64_t mine_elapsed;
