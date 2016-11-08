@@ -1728,7 +1728,7 @@ void PTPMessagePathDelayRespFollowUp::sendPort(IEEE1588Port * port,
 		 &(responseOriginTimestamp_BE.nanoseconds),
 		 sizeof(responseOriginTimestamp.nanoseconds));
 
-	GPTP_LOG_VERBOSE("PDelay Resp Timestamp: %u,%u",
+	GPTP_LOG_VERBOSE("PDelay Resp FollowUp Timestamp: %u,%u",
 		   responseOriginTimestamp.seconds_ls,
 		   responseOriginTimestamp.nanoseconds);
 
