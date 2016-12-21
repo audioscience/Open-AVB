@@ -1668,6 +1668,29 @@ void PTPMessagePathDelayRespFollowUp::processMessage(IEEE1588Port * port)
 		}
 	} else {
 		if (!port->getAutomotiveProfile()) {
+
+			/* TEST CODE - output delays greater than 400 nanoseconds */
+			if (link_delay > 400) {
+				GPTP_LOG_ERROR("Link delay %lld greater than 400 nanoseconds",
+					link_delay);
+
+				GPTP_LOG_ERROR("Local Req %u %u %u Resp %u %u %u",
+					request_tx_timestamp.seconds_ms,
+					request_tx_timestamp.seconds_ls,
+					request_tx_timestamp.nanoseconds,
+					response_rx_timestamp.seconds_ms,
+					response_rx_timestamp.seconds_ls,
+					response_rx_timestamp.nanoseconds);
+
+				GPTP_LOG_ERROR("Remote Req %u %u %u Resp %u %u %u",
+					remote_req_rx_timestamp.seconds_ms,
+					remote_req_rx_timestamp.seconds_ls,
+					remote_req_rx_timestamp.nanoseconds,
+					remote_resp_tx_timestamp.seconds_ms,
+					remote_resp_tx_timestamp.seconds_ls,
+					remote_resp_tx_timestamp.nanoseconds);
+			}
+
 			port->setAsCapable( true );
 		}
 	}
