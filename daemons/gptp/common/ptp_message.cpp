@@ -1648,7 +1648,8 @@ void PTPMessagePathDelayRespFollowUp::processMessage(IEEE1588Port * port)
 			GPTP_LOG_ERROR("Link delay %lld beyond neighborPropDelayThresh (%lld); not AsCapable",
 				link_delay, port->getNeighPropDelayThresh());
 
-			GPTP_LOG_ERROR("Local Req %u %u %u Resp %u %u %u",
+			GPTP_LOG_ERROR("Local Req [SeqId %u] %u %u %u Resp %u %u %u",
+				req->getSequenceId(),
 				request_tx_timestamp.seconds_ms,
 				request_tx_timestamp.seconds_ls,
 				request_tx_timestamp.nanoseconds,
