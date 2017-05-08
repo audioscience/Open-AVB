@@ -55,6 +55,21 @@ SOCKET mmrp_socket;
 
 struct mmrp_database *MMRP_db;
 
+/* MMRP */
+#if LOG_MMRP && LOG_MRP
+void mmrp_print_debug_info(int evt, const struct mmrp_attribute *attrib)
+{
+	char * state_mc_states = NULL;
+
+	state_mc_states = mrp_print_status(&(attrib->applicant),
+					   &(attrib->registrar));
+	mrpd_log_printf("MMRP event %s, %s\n",
+		        mrp_event_string(evt),
+		        state_mc_states);
+}
+#endif
+
+
 struct mmrp_attribute *mmrp_lookup(struct mmrp_attribute *rattrib)
 {
 	struct mmrp_attribute *attrib;
