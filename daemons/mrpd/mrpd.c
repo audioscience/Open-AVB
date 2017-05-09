@@ -352,6 +352,13 @@ mrpd_send_ctl_msg(struct client_s *client, char *notify_data,
 		ctl_msg_queue.tail = item;
 	ctl_msg_queue.msg_count++;
 
+#if 0
+	if (ctl_msg_queue.msg_count && (ctl_msg_queue.msg_count % 256 == 0)) {
+		mrpd_log_printf("[%03d] CLT MSG count\n",
+			ctl_msg_queue.msg_count);
+	}
+#endif
+
 #if LOG_CLIENT_SEND
 	if (logging_enable) {
 		if (client->addr.sa.sa_family == AF_INET) {
