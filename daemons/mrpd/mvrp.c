@@ -61,13 +61,16 @@ struct mvrp_database *MVRP_db;
 #if LOG_MVRP && LOG_MRP
 void mvrp_print_debug_info(int evt, const struct mvrp_attribute *attrib)
 {
-	char * state_mc_states = NULL;
+	if (attrib) {
+		char * state_mc_states = NULL;
 
-	state_mc_states = mrp_print_status(&(attrib->applicant),
-					   &(attrib->registrar));
-	mrpd_log_printf("MVRP event %s, %s\n",
-		        mrp_event_string(evt),
-		        state_mc_states);		
+		state_mc_states = mrp_print_status(&(attrib->applicant),
+						&(attrib->registrar));
+
+		mrpd_log_printf("MVRP event %s, %s\n",
+				mrp_event_string(evt),
+				state_mc_states);
+	}
 }
 #endif
 
