@@ -980,6 +980,7 @@ int main(int argc, char *argv[])
 			break;
 		case 'l':
 			logging_enable = 1;
+			setlinebuf(stdout);
 			break;
 		case 'd':
 			daemonize = 1;
