@@ -36,6 +36,7 @@
 #define LOG_MVRP 0
 #define LOG_MMRP 0
 #define LOG_MSRP 0
+#define LOG_MSRP_ATTRIBUTE_RXTX 0
 #define LOG_POLL_EVENTS 0
 #define LOG_TIMERS 0
 #define LOG_MSRP_GARBAGE_COLLECTION 0

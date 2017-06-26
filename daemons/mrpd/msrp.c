@@ -124,6 +124,34 @@ void msrp_print_debug_info(int evt, const struct msrp_attribute *attrib)
 }
 #endif
 
+#if LOG_MSRP_ATTRIBUTE_RXTX
+void msrp_print_attrib_info(const char *heading, int evt, const struct msrp_attribute *attrib)
+{
+	const char *at[] = {"Listener ", "TalkerAdv"};
+	const char *pt = NULL;
+	if (MSRP_LISTENER_TYPE == attrib->type) {
+		pt = at[0];
+	} else if (MSRP_TALKER_ADV_TYPE == attrib->type) {
+		pt = at[1];
+	}
+	if (pt) {
+			mrpd_log_printf("%s %s S=%02x%02x%02x%02x%02x%02x%02x%02x substate %d event %s\n",
+			heading, pt,
+			attrib->attribute.talk_listen.StreamID[0],
+			attrib->attribute.talk_listen.StreamID[1],
+			attrib->attribute.talk_listen.StreamID[2],
+			attrib->attribute.talk_listen.StreamID[3],
+			attrib->attribute.talk_listen.StreamID[4],
+			attrib->attribute.talk_listen.StreamID[5],
+			attrib->attribute.talk_listen.StreamID[6],
+			attrib->attribute.talk_listen.StreamID[7],
+			attrib->substate,
+			mrp_pdu_string(evt));
+	}
+}
+#endif
+
+
 int msrp_count_type(uint32_t attrib_type)
 {
 	int count = 0;
@@ -1299,6 +1327,10 @@ int msrp_recv_msg()
 						     vectevt[vectevt_idx]);
 #endif
 
+#if LOG_MSRP_ATTRIBUTE_RXTX
+						msrp_print_attrib_info("Rx", vectevt[vectevt_idx], attrib);
+#endif
+
 						switch (vectevt[vectevt_idx]) {
 						case MRPDU_NEW:
 							msrp_event
@@ -1584,6 +1616,10 @@ int msrp_recv_msg()
 						    ("MSRP msrp_recv_msg() TalkerAdv[%d][%d] attrib %d\n",
 						     vectidx, vectevt_idx,
 						     vectevt[vectevt_idx]);
+#endif
+
+#if LOG_MSRP_ATTRIBUTE_RXTX
+						msrp_print_attrib_info("Rx", vectevt[vectevt_idx], attrib);
 #endif
 
 						switch (vectevt[vectevt_idx]) {
@@ -2391,6 +2427,10 @@ msrp_emit_talkervectors(unsigned char *msgbuf, unsigned char *msgbuf_eof,
 		vectevt[1] = 0;
 		vectevt[2] = 0;
 
+#if LOG_MSRP_ATTRIBUTE_RXTX
+		msrp_print_attrib_info("Tx", vectevt[0], attrib);
+#endif
+
 		/* now attempt to vectorize contiguous other attributes
 		 * which also need to be transmitted
 		 */
@@ -2455,6 +2495,10 @@ msrp_emit_talkervectors(unsigned char *msgbuf, unsigned char *msgbuf_eof,
 
 			vectevt_idx++;
 			numvalues++;
+
+#if LOG_MSRP_ATTRIBUTE_RXTX
+			msrp_print_attrib_info("Tx", vectevt[vectevt_idx], vattrib);
+#endif
 
 			if (vectevt_idx > 2) {
 				vect_3pack = MRPDU_3PACK_ENCODE(vectevt[0],
@@ -2673,6 +2717,10 @@ msrp_emit_listenvectors(unsigned char *msgbuf, unsigned char *msgbuf_eof,
 		vectevt[1] = 0;
 		vectevt[2] = 0;
 
+#if LOG_MSRP_ATTRIBUTE_RXTX
+		msrp_print_attrib_info("Tx", vectevt[0], attrib);
+#endif
+
 		if (listen_declare_sz == (listen_declare_idx + 1)) {
 			listen_declare =
 			    (int *)realloc(listen_declare,
@@ -2747,6 +2795,10 @@ msrp_emit_listenvectors(unsigned char *msgbuf, unsigned char *msgbuf_eof,
 				goto oops;
 				break;
 			}
+
+#if LOG_MSRP_ATTRIBUTE_RXTX
+			msrp_print_attrib_info("Tx", vectevt[vectevt_idx], vattrib);
+#endif
 
 			vectevt_idx++;
 			numvalues++;
