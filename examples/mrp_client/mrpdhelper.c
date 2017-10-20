@@ -40,7 +40,7 @@ and parses them into a machine readable structure.
 #include <stdlib.h>
 #include <string.h>
 #include <stdint.h>		// for uint8_t etc
-#ifdef __linux__
+#if defined __linux__ || defined __APPLE__
 #include <inttypes.h>
 #else
 #define SCNu64       "I64u"
