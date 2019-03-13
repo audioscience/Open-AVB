@@ -928,7 +928,13 @@ mrp_registrar_fsm(mrp_registrar_attribute_t * attrib,
 		break;
 	case MRP_EVENT_RLV:
 		notify = MRP_NOTIFY_LV;
-		/* fall thru */
+		switch (mrp_state) {
+		case MRP_IN_STATE:
+			mrp_state = MRP_MT_STATE;
+		default:
+			break;
+		}
+		break;
 	case MRP_EVENT_TXLA:
 	case MRP_EVENT_RLA:
 	case MRP_EVENT_REDECLARE:
