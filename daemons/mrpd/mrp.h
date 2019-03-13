@@ -140,7 +140,7 @@ typedef struct mrp_registrar_attribute {
  * Here we use 100 msec, or 300/3 msec.
  */
 #define MRP_JOINTIMER_VAL	100	/* join timeout in msec */
-#define MRP_LVTIMER_VAL		1000	/* leave timeout in msec */
+#define MRP_LVTIMER_VAL		5000	/* leave timeout in msec */
 #define MRP_LVATIMER_VAL	10000	/* leaveall timeout in msec */
 #define MRP_PERIODTIMER_VAL	1000	/* periodic timeout in msec */
 
