@@ -656,6 +656,7 @@ void IEEE1588Port::processEvent(Event e)
 					unsigned char priority1;
 					unsigned char priority2;
 					ClockQuality clock_quality;
+					PathTraceTLV path_trace;
 
 					clock_identity = getClock()->getClockIdentity();
 					getClock()->setGrandmasterClockIdentity( clock_identity );
@@ -665,6 +666,8 @@ void IEEE1588Port::processEvent(Event e)
 					getClock()->setGrandmasterPriority2( priority2 );
 					clock_quality = getClock()->getClockQuality();
 					getClock()->setGrandmasterClockQuality( clock_quality );
+					path_trace.appendClockIdentity(&clock_identity);
+					getClock()->setGrandmasterPathTrace(path_trace);
 				}
 
 				j = 0;
@@ -687,6 +690,7 @@ void IEEE1588Port::processEvent(Event e)
 							unsigned char priority1;
 							unsigned char priority2;
 							ClockQuality *clock_quality;
+							PathTraceTLV *path_trace;
 
 							ports[j]->recommendState
 							  ( PTP_SLAVE, changed_external_master );
@@ -699,6 +703,10 @@ void IEEE1588Port::processEvent(Event e)
 							getClock()->setGrandmasterPriority2( priority2 );
 							clock_quality = EBest->getGrandmasterClockQuality();
 							getClock()->setGrandmasterClockQuality(*clock_quality);
+							path_trace = EBest->getGrandmasterPathTrace();
+							getClock()->setGrandmasterPathTrace(*path_trace);
+
+							// Save the PathTraceTLV for the GM
 						} else {
 							/* Otherwise we are the master because we have
 							   sync'd to a better clock */
@@ -828,6 +836,7 @@ void IEEE1588Port::processEvent(Event e)
 						unsigned char priority1;
 						unsigned char priority2;
 						ClockQuality clock_quality;
+						PathTraceTLV path_trace;
 
 						clock_identity = getClock()->getClockIdentity();
 						getClock()->setGrandmasterClockIdentity( clock_identity );
@@ -837,6 +846,8 @@ void IEEE1588Port::processEvent(Event e)
 						getClock()->setGrandmasterPriority2( priority2 );
 						clock_quality = getClock()->getClockQuality();
 						getClock()->setGrandmasterClockQuality( clock_quality );
+						path_trace.appendClockIdentity(&clock_identity);
+						getClock()->setGrandmasterPathTrace(path_trace);
 					}
 					port_state = PTP_MASTER;
 					Timestamp system_time;
