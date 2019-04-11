@@ -666,7 +666,7 @@ void IEEE1588Port::processEvent(Event e)
 					getClock()->setGrandmasterPriority2( priority2 );
 					clock_quality = getClock()->getClockQuality();
 					getClock()->setGrandmasterClockQuality( clock_quality );
-					path_trace.appendClockIdentity(&clock_identity);
+					// set empty path trace
 					getClock()->setGrandmasterPathTrace(path_trace);
 				}
 
@@ -846,7 +846,7 @@ void IEEE1588Port::processEvent(Event e)
 						getClock()->setGrandmasterPriority2( priority2 );
 						clock_quality = getClock()->getClockQuality();
 						getClock()->setGrandmasterClockQuality( clock_quality );
-						path_trace.appendClockIdentity(&clock_identity);
+						// set empty path trace
 						getClock()->setGrandmasterPathTrace(path_trace);
 					}
 					port_state = PTP_MASTER;
