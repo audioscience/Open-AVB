@@ -402,6 +402,14 @@ class PathTraceTLV {
 		tlvType = PLAT_htons(PATH_TRACE_TLV_TYPE);
 	}
 	/**
+	* @brief Copies a PathTraceTLV instance.
+	* Sets tlvType and identityList to that of supplied PathTraceTLV instance
+	*/
+	PathTraceTLV(const PathTraceTLV& other) {
+		tlvType = other.tlvType;
+		identityList = other.identityList;
+	}
+	/**
 	 * @brief  Parses ClockIdentity from message buffer
 	 * @param  buffer [in] Message buffer. It should be at least ::PTP_CLOCK_IDENTITY_LENGTH bytes long.
 	 * @param  size [in] Buffer size. Should be the length of the data pointed to by the buffer argument.
@@ -543,6 +551,14 @@ class PTPMessageAnnounce:public PTPMessageCommon {
 	 */
 	ClockQuality *getGrandmasterClockQuality(void) {
 		return grandmasterClockQuality;
+	}
+
+	/**
+	* @brief  Gets grandmaster clock quality
+	* @return Pointer to a ClockQuality object.
+	*/
+	PathTraceTLV *getGrandmasterPathTrace(void) {
+		return &tlv;
 	}
 
 	/**
