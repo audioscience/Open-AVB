@@ -113,6 +113,7 @@ private:
 	unsigned char grandmaster_priority1;
 	unsigned char grandmaster_priority2;
 	bool grandmaster_is_boundary_clock;
+	PathTraceTLV grandmaster_path_trace;
 	uint8_t time_source;
 
 	ClockIdentity LastEBestIdentity;
@@ -364,6 +365,23 @@ public:
    */
   uint16_t getMasterStepsRemoved(void) {
 	  return steps_removed;
+  }
+
+  /**
+  * @brief  Gets grandmaster path trace object
+  * @return Clock quality
+  */
+  PathTraceTLV *getGrandmasterPathTrace(void) {
+	  return &grandmaster_path_trace;
+  }
+
+  /**
+  * @brief  Sets grandmaster path trace object
+  * @param  PathTraceTLV object to be set
+  * @return void
+  */
+  void setGrandmasterPathTrace(const PathTraceTLV& path_trace) {
+	  grandmaster_path_trace = path_trace;
   }
 
   /**
