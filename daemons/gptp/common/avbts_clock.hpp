@@ -417,6 +417,15 @@ public:
   }
 
   /**
+  * @brief  Sets IEEE1588Clock priority1 attribute (IEEE 802.1AS clause 8.6.2.1)
+  * @param  priority1 value to be set
+  * @return void
+  */
+  void setPriority1(unsigned char priority1) {
+	  this->priority1 = priority1;
+  }
+
+  /**
    * @brief  Gets nextPortId value
    * @return The remaining value from the division of current number of ports by
    * (maximum number of ports + 1) + 1
