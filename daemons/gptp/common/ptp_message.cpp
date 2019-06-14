@@ -723,6 +723,7 @@ void PTPMessageSync::sendPort(IEEE1588Port * port, PortIdentity * destIdentity)
 	control = MESSAGE_OTHER;
 	ClockIdentity clock_identity;
 
+	tlv.copy(port->getClock()->getGrandmasterPathTrace());
 	id = port->getClock()->getClockIdentity();
 	tlv.appendClockIdentity(&id);
 

@@ -410,6 +410,15 @@ class PathTraceTLV {
 		identityList = other.identityList;
 	}
 	/**
+	* @brief Copies a PathTraceTLV contents.
+	* Sets tlvType and identityList to that of supplied PathTraceTLV instance
+	*/
+	void copy(const PathTraceTLV *other) {
+		tlvType = other->tlvType;
+		identityList.clear();
+		identityList = other->identityList;
+	}
+	/**
 	 * @brief  Parses ClockIdentity from message buffer
 	 * @param  buffer [in] Message buffer. It should be at least ::PTP_CLOCK_IDENTITY_LENGTH bytes long.
 	 * @param  size [in] Buffer size. Should be the length of the data pointed to by the buffer argument.
